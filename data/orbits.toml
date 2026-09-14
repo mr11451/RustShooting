@@ -1,0 +1,42 @@
+# Temporary orbit data for stage 1.
+# Q12.4 values use 16 raw units per logical unit.
+
+[orbit.straight_down]
+orbit_id = 1
+orbit_type = "Straight"
+direction = "South"
+speed_q12_4 = 16
+radius_q12_4 = 0
+duration_frames = 540
+acceleration_q12_4 = 0
+next_orbit_id = 0
+rotation = 0
+
+[orbit.circle]
+orbit_id = 2
+orbit_type = "Circle"
+direction = "East"
+speed_q12_4 = 16
+radius_q12_4 = 768
+start_angle = 0
+end_angle = 16384
+duration_frames = 180
+acceleration_q12_4 = 0
+next_orbit_id = 1
+rotation = 1
+
+[orbit.bezier]
+orbit_id = 3
+orbit_type = "Bezier"
+direction = "South"
+speed_q12_4 = 16
+control_point_1_x_q12_4 = 0
+control_point_1_y_q12_4 = 0
+control_point_2_x_q12_4 = 1600
+control_point_2_y_q12_4 = 0
+control_point_end_x_q12_4 = 5120
+control_point_end_y_q12_4 = 2560
+duration_frames = 900
+acceleration_q12_4 = 0
+next_orbit_id = 0
+rotation = 0

@@ -1,0 +1,13 @@
+[package]
+name = "rust_shooting"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bytemuck = { version = "1.25", features = ["derive"] }
+image = { version = "0.25", default-features = false, features = ["gif", "png"] }
+winit = "0.30"
+wgpu = "27"
+egui = "0.33"
+pollster = "0.4"
+rodio = "0.21"

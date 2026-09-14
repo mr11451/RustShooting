@@ -1,0 +1,80 @@
+# Temporary stage 1 schedule data.
+# frame is counted after StageIntro. Coordinates and speeds use signed Q12.4.
+
+[[schedule]]
+schedule_id = 1
+stage_id = 1
+frame = 0
+spawn_x_q12_4 = 1280
+spawn_y_q12_4 = -384
+object_type = "Enemy"
+character_id = 2
+orbit_id = 1
+difficulty = 1
+fire_pattern_id = 1
+background_speed_q12_4 = 16
+
+[[schedule]]
+schedule_id = 2
+stage_id = 1
+frame = 90
+spawn_x_q12_4 = 5120
+spawn_y_q12_4 = -384
+object_type = "Enemy"
+character_id = 2
+orbit_id = 2
+difficulty = 1
+fire_pattern_id = 1
+background_speed_q12_4 = 16
+
+[[schedule]]
+schedule_id = 3
+stage_id = 1
+frame = 900
+spawn_x_q12_4 = 2560
+spawn_y_q12_4 = 1920
+object_type = "GrowthItem"
+character_id = 200
+orbit_id = 0
+difficulty = 1
+fire_pattern_id = 0
+background_speed_q12_4 = 16
+
+[[schedule]]
+schedule_id = 4
+stage_id = 1
+frame = 1800
+spawn_x_q12_4 = 7680
+spawn_y_q12_4 = -384
+object_type = "Enemy"
+character_id = 2
+orbit_id = 1
+difficulty = 1
+fire_pattern_id = 1
+background_speed_q12_4 = 16
+
+[[schedule]]
+schedule_id = 5
+stage_id = 1
+frame = 3600
+spawn_x_q12_4 = 5120
+spawn_y_q12_4 = 1920
+object_type = "GrowthItem"
+character_id = 200
+orbit_id = 0
+difficulty = 1
+fire_pattern_id = 0
+background_speed_q12_4 = 16
+
+[[schedule]]
+schedule_id = 6
+stage_id = 1
+frame = 5399
+spawn_x_q12_4 = 5120
+spawn_y_q12_4 = -512
+object_type = "Boss"
+character_id = 100
+orbit_id = 3
+difficulty = 4
+fire_pattern_id = 10
+background_speed_q12_4 = 16

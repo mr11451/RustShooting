@@ -1,0 +1,22 @@
+# Temporary audio asset mapping.
+
+[bgm.stage01]
+id = 1
+path = "assets/audio/stage01_bgm.wav"
+loop = true
+
+[sound.fire]
+id = 1
+path = "assets/audio/fire.wav"
+
+[sound.hit]
+id = 2
+path = "assets/audio/hit.wav"
+
+[sound.destroy]
+id = 3
+path = "assets/audio/destroy.wav"
+
+[sound.damage]
+id = 4
+path = "assets/audio/damage.wav"

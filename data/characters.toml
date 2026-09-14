@@ -1,0 +1,85 @@
+# Temporary character trait data for the first playable test.
+
+[character.player]
+character_id = 1
+character_type = "Player"
+shape_id = 1
+animation_id = 0
+hitbox_width = 256
+hitbox_height = 256
+max_hp = 100
+contact_damage = 0
+player_damage = 0
+score = 0
+default_orbit_id = 0
+default_fire_pattern_id = 0
+bullet_character_id = 1
+growth_effect_id = 0
+destroy_effect_id = 0
+destroy_sound_id = 0
+image = "assets/characters/player.gif"
+tile_width = 32
+tile_height = 32
+
+[character.enemy_basic]
+character_id = 2
+character_type = "Enemy"
+shape_id = 1
+animation_id = 0
+hitbox_width = 256
+hitbox_height = 256
+max_hp = 10
+contact_damage = 10
+player_damage = 10
+score = 100
+default_orbit_id = 1
+default_fire_pattern_id = 1
+bullet_character_id = 2
+growth_effect_id = 0
+destroy_effect_id = 1
+destroy_sound_id = 3
+image = "assets/characters/enemy_basic.gif"
+tile_width = 32
+tile_height = 32
+
+[character.boss]
+character_id = 100
+character_type = "Boss"
+shape_id = 1
+animation_id = 0
+hitbox_width = 1024
+hitbox_height = 768
+max_hp = 1000
+contact_damage = 50
+player_damage = 50
+score = 10000
+default_orbit_id = 3
+default_fire_pattern_id = 10
+bullet_character_id = 2
+growth_effect_id = 0
+destroy_effect_id = 2
+destroy_sound_id = 3
+image = "assets/characters/boss.gif"
+tile_width = 32
+tile_height = 32
+
+[character.growth_item]
+character_id = 200
+character_type = "GrowthItem"
+shape_id = 2
+animation_id = 0
+hitbox_width = 192
+hitbox_height = 192
+max_hp = 0
+contact_damage = 0
+player_damage = 0
+score = 0
+default_orbit_id = 0
+default_fire_pattern_id = 0
+bullet_character_id = 0
+growth_effect_id = 1
+destroy_effect_id = 0
+destroy_sound_id = 0
+image = "assets/characters/growth_item.gif"
+tile_width = 32
+tile_height = 32

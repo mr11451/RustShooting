@@ -1,0 +1,62 @@
+# Temporary bullet trait data.
+# All positions and speeds use signed Q12.4 values.
+
+[bullet.player_basic]
+bullet_character_id = 1
+owner_type = "Player"
+shape_id = 1
+motion_type = "Straight"
+direction = "North"
+direction_count = 16
+speed_q12_4 = 32
+acceleration_q12_4 = 0
+damage = 1
+penetrating = false
+homing_target = "None"
+target_lock = "AtFire"
+hitbox_width_q12_4 = 8
+hitbox_height_q12_4 = 32
+sprite = "assets/bullets/bullets.gif"
+frame_index = 0
+fire_sound_id = 1
+hit_sound_id = 2
+
+[bullet.player_piercing]
+bullet_character_id = 2
+owner_type = "Player"
+shape_id = 1
+motion_type = "Straight"
+direction = "North"
+direction_count = 16
+speed_q12_4 = 32
+acceleration_q12_4 = 0
+damage = 2
+penetrating = true
+homing_target = "None"
+target_lock = "AtFire"
+hitbox_width_q12_4 = 8
+hitbox_height_q12_4 = 32
+sprite = "assets/bullets/bullets.gif"
+frame_index = 1
+fire_sound_id = 1
+hit_sound_id = 2
+
+[bullet.enemy_basic]
+bullet_character_id = 3
+owner_type = "Enemy"
+shape_id = 1
+motion_type = "FixedDirection"
+direction = "South"
+direction_count = 16
+speed_q12_4 = 16
+acceleration_q12_4 = 0
+damage = 10
+penetrating = false
+homing_target = "None"
+target_lock = "AtFire"
+hitbox_width_q12_4 = 8
+hitbox_height_q12_4 = 32
+sprite = "assets/bullets/bullets.gif"
+frame_index = 2
+fire_sound_id = 1
+hit_sound_id = 2

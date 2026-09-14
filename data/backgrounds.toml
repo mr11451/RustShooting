@@ -1,0 +1,17 @@
+# Temporary background data for stage 1.
+
+[background.stage01]
+background_id = 1
+tile_atlas_path = "assets/backgrounds/stage01_atlas.png"
+tile_width = 16
+tile_height = 16
+atlas_columns = 4
+atlas_rows = 4
+map_width = 40
+map_height = 338
+scroll_speed_q12_4 = 16
+geometry_layer_id = 1
+
+# tile_id 0 is empty. This compact map is the first test chunk.
+chunk_rows = 4
+tile_map_path = "data/stage01_tilemap.txt"

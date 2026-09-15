@@ -112,7 +112,24 @@ pub struct ScheduleData {
 }
 ```
 
-### 2.3 キャラクター特性テーブル（`CharacterTrait`）
+### 2.3 ステージ戦闘特性（`StageCombatData`）
+
+ステージごとの通常敵、ボス、発射パターン、敵弾種をまとめて定義します。
+
+```rust
+pub struct StageCombatData {
+  pub stage_id: u8,
+  pub enemy_character_id: u16,
+  pub boss_character_id: u16,
+  pub enemy_fire_pattern_id: u16,
+  pub boss_fire_pattern_id: u16,
+  pub enemy_bullet_character_id: u16,
+}
+```
+
+`STAGE_COMBAT_DATA`を変更すると、スケジュールの出現タイミングを変えずにステージの敵構成や敵弾種を変更できます。
+
+### 2.4 キャラクター特性テーブル（`CharacterTrait`）
 自機、各種敵、ボス、アイテムの基本ステータスを定義します。
 
 ```rust
@@ -136,7 +153,31 @@ pub struct CharacterTrait {
 }
 ```
 
-### 2.4 弾特性データ（`BulletCharacterData`）
+敵・ボスの表示サイズは`EnemyVisualData`でIDごとに管理します。`width`/`height`は表示ピクセルであり、`CharacterTrait`の当たり判定サイズとは独立しています。
+
+```rust
+pub struct EnemyVisualData {
+  pub character_id: u16,
+  pub width: u16,
+  pub height: u16,
+}
+```
+
+ステージ別の敵画像ファイル名は`StageEnemyImageData`で管理します。固定長配列ではなくテーブルの行を検索するため、ステージごとに敵種類の行数を変えられます。
+
+```rust
+pub struct StageEnemyImageData {
+  pub stage_id: u8,
+  pub character_id: u16,
+  pub image_file_name: &'static str,
+}
+```
+
+全ステージ共通の画像ディレクトリは`STAGE_ENEMY_IMAGE_DIRECTORY`（`assets/characters`）で管理し、テーブルにはファイル名だけを記載します。
+
+敵弾は`EnemyBulletProfileData`で発射元キャラクターIDごとに弾特性IDを割り当てます。通常敵ID `2..=6`とボスID `100..=105`は、それぞれ弾ID `6..=16`へ対応し、形状・当たり判定・ダメージ・画像フレームを個別に調整できます。
+
+### 2.5 弾特性データ（`BulletCharacterData`）
 自機弾および敵弾の衝突特性・威力を定義します。
 
 ```rust
@@ -152,7 +193,7 @@ pub struct BulletCharacterData {
 }
 ```
 
-### 2.5 自弾成長特性データ（`PlayerGrowthData`）
+### 2.6 自弾成長特性データ（`PlayerGrowthData`）
 
 成長レベルごとの自弾発射設定をテーブルで管理します。ゲームコードはレベル別の数値を直接分岐せず、このテーブルを参照します。
 
@@ -163,13 +204,18 @@ pub struct PlayerGrowthData {
   pub bullets_per_group: u8,   // 1グループ内の横並び弾数
   pub bullet_character_id: u16,// 使用する自弾特性ID
   pub speed: Q12_4,            // 自弾の速さ。方向変換前の正値
+  pub visual_width: u16,       // 自機表示幅
+  pub visual_height: u16,      // 自機表示高
+  pub hitbox_half_width: i16,  // 自機当たり判定の半幅
+  pub hitbox_half_height: i16, // 自機当たり判定の半高
+  pub move_speed: Q12_4,       // 自機移動速度
   pub directions: &'static [Direction16], // グループ内各弾の射出方向
 }
 ```
 
 現行の仮データは、グループ数 `4/6/8/10/12`、グループ内弾数 `1/2/3/4/5`、弾種ID `1`です。方向配列はレベルごとに定義し、北方向と左右の斜め方向を組み合わせて、発射時にQ12.4速度ベクトルへ変換します。
 
-### 2.6 発射パターンデータ（`FirePatternData`）
+### 2.7 発射パターンデータ（`FirePatternData`）
 敵が弾を発射するタイミング・オフセット・弾種・方向を定義します。
 
 ```rust
@@ -186,7 +232,7 @@ pub struct FirePatternData {
 }
 ```
 
-### 2.7 軌道データ（`OrbitData`）
+### 2.8 軌道データ（`OrbitData`）
 敵およびボスの移動軌道を定義します。
 
 ```rust

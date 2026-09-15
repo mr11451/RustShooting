@@ -2,7 +2,13 @@ use std::{fmt, path::Path};
 
 use image::RgbaImage;
 
-use crate::sprite::{SpriteError, SpriteSheet};
+use crate::{
+    data::{
+        PLAYER_BULLET_IMAGE_DIRECTORY, STAGE_ENEMY_IMAGE_DIRECTORY, player_bullet_image_data,
+        stage_enemy_character_ids, stage_enemy_image_data,
+    },
+    sprite::{SpriteError, SpriteSheet},
+};
 
 #[derive(Debug)]
 pub enum AssetError {
@@ -34,12 +40,12 @@ impl From<image::ImageError> for AssetError {
 }
 
 pub struct StageAssets {
-    pub player_sheet: SpriteSheet,
-    pub enemy_sheet: SpriteSheet,
+    pub player_variant_sheets: Vec<SpriteSheet>,
+    pub stage_enemy_sheets: Vec<Vec<SpriteSheet>>,
     pub boss_sheet: SpriteSheet,
     pub item_sheet: SpriteSheet,
-    pub bullet_sheet: SpriteSheet,
-    pub enemy_bullet_sheet: SpriteSheet,
+    pub player_bullet_sheets: Vec<SpriteSheet>,
+    pub enemy_bullet_variant_sheets: Vec<SpriteSheet>,
     pub background_atlas: RgbaImage,
 }
 
@@ -70,40 +76,75 @@ impl StageAssetCache {
 
 impl AssetCatalog {
     pub fn load_stage_one() -> Result<StageAssets, AssetError> {
+        Self::load_stage_id(1)
+    }
+
+    pub fn load_stage_id(stage_id: u8) -> Result<StageAssets, AssetError> {
         Self::load_stage(
-            "assets/characters/player.gif",
-            "assets/characters/enemy_basic.gif",
             "assets/characters/boss.gif",
             "assets/characters/growth_item.gif",
-            "assets/bullets/bullets.gif",
-            "assets/bullets/enemy_bullets.gif",
-            "assets/backgrounds/stage01_atlas.png",
+            format!("assets/backgrounds/stage{:02}_atlas.png", stage_id),
         )
     }
 
     pub fn load_stage(
-        character_path: impl AsRef<Path>,
-        enemy_path: impl AsRef<Path>,
         boss_path: impl AsRef<Path>,
         item_path: impl AsRef<Path>,
-        bullet_path: impl AsRef<Path>,
-        enemy_bullet_path: impl AsRef<Path>,
         background_path: impl AsRef<Path>,
     ) -> Result<StageAssets, AssetError> {
-        let player_sheet = SpriteSheet::from_gif_path(character_path, 32, 32)?;
-        let enemy_sheet = SpriteSheet::from_gif_path(enemy_path, 32, 32)?;
+        let player_variant_sheets = (0..=4)
+            .map(|level| {
+                SpriteSheet::from_gif_path(
+                    format!("assets/characters/player_level_{level:02}.gif"),
+                    32,
+                    32,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut stage_enemy_sheets = Vec::with_capacity(6);
+        for stage_id in 1..=6 {
+            let sheets = stage_enemy_character_ids(stage_id)
+                .into_iter()
+                .filter_map(|character_id| stage_enemy_image_data(stage_id, character_id))
+                .map(|data| {
+                    SpriteSheet::from_gif_path(
+                        format!("{STAGE_ENEMY_IMAGE_DIRECTORY}/{}", data.image_file_name),
+                        32,
+                        32,
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            stage_enemy_sheets.push(sheets);
+        }
         let boss_sheet = SpriteSheet::from_gif_path(boss_path, 64, 64)?;
         let item_sheet = SpriteSheet::from_gif_path(item_path, 32, 32)?;
-        let bullet_sheet = SpriteSheet::from_gif_path(bullet_path, 32, 32)?;
-        let enemy_bullet_sheet = SpriteSheet::from_gif_path(enemy_bullet_path, 8, 8)?;
+        let player_bullet_sheets = (1..=5)
+            .filter_map(player_bullet_image_data)
+            .map(|data| {
+                SpriteSheet::from_gif_path(
+                    format!("{PLAYER_BULLET_IMAGE_DIRECTORY}/{}", data.image_file_name),
+                    16,
+                    16,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let enemy_bullet_variant_sheets = (6..=16)
+            .map(|bullet_id| {
+                SpriteSheet::from_gif_path(
+                    format!("assets/bullets/enemy_bullet_{bullet_id:02}.gif"),
+                    8,
+                    8,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         let background_atlas = image::open(background_path)?.into_rgba8();
         Ok(StageAssets {
-            player_sheet,
-            enemy_sheet,
+            player_variant_sheets,
+            stage_enemy_sheets,
             boss_sheet,
             item_sheet,
-            bullet_sheet,
-            enemy_bullet_sheet,
+            player_bullet_sheets,
+            enemy_bullet_variant_sheets,
             background_atlas,
         })
     }
@@ -116,14 +157,25 @@ mod tests {
     #[test]
     fn loads_stage_one_assets() {
         let assets = AssetCatalog::load_stage_one().expect("stage one assets should load");
-        assert_eq!(assets.player_sheet.columns, 2);
-        assert_eq!(assets.enemy_sheet.columns, 2);
+        assert_eq!(assets.player_variant_sheets.len(), 5);
+        assert_eq!(assets.stage_enemy_sheets.len(), 6);
+        for (stage_index, sheets) in assets.stage_enemy_sheets.iter().enumerate() {
+            assert_eq!(
+                sheets.len(),
+                stage_enemy_character_ids(stage_index as u8 + 1).len()
+            );
+        }
         assert_eq!(assets.boss_sheet.columns, 2);
         assert_eq!(assets.item_sheet.columns, 2);
-        assert_eq!(assets.bullet_sheet.columns, 3);
-        assert_eq!(assets.enemy_bullet_sheet.columns, 2);
-        assert_eq!(assets.enemy_bullet_sheet.frame_width, 8);
-        assert_eq!(assets.enemy_bullet_sheet.frame_height, 8);
+        assert_eq!(assets.player_bullet_sheets.len(), 5);
+        assert!(assets.player_bullet_sheets.iter().all(|sheet| {
+            sheet.frame_width == 16
+                && sheet.frame_height == 16
+                && sheet.columns == 2
+                && sheet.rows == 1
+                && sheet.animation_count() == 1
+        }));
+        assert_eq!(assets.enemy_bullet_variant_sheets.len(), 11);
         assert_eq!(assets.boss_sheet.frame_width, 64);
         assert_eq!(assets.boss_sheet.frame_height, 64);
         assert_eq!(assets.background_atlas.dimensions(), (64, 64));

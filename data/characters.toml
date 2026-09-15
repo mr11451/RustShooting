@@ -17,7 +17,7 @@ bullet_character_id = 1
 growth_effect_id = 0
 destroy_effect_id = 0
 destroy_sound_id = 0
-image = "assets/characters/player.gif"
+image = "assets/characters/player_level_00.gif"
 tile_width = 32
 tile_height = 32
 
@@ -38,7 +38,7 @@ bullet_character_id = 2
 growth_effect_id = 0
 destroy_effect_id = 1
 destroy_sound_id = 3
-image = "assets/characters/enemy_basic.gif"
+image = "assets/characters/stage01_enemy_02.gif"
 tile_width = 32
 tile_height = 32
 

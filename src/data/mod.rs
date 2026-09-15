@@ -190,6 +190,45 @@ pub struct BulletCharacterData {
     pub player_damage: u16,
 }
 
+pub const PLAYER_BULLET_IMAGE_DIRECTORY: &str = "assets/bullets";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PlayerBulletImageData {
+    pub bullet_character_id: u16,
+    pub image_file_name: &'static str,
+}
+
+pub const PLAYER_BULLET_IMAGE_DATA: &[PlayerBulletImageData] = &[
+    PlayerBulletImageData {
+        bullet_character_id: 1,
+        image_file_name: "player_bullet_01.gif",
+    },
+    PlayerBulletImageData {
+        bullet_character_id: 2,
+        image_file_name: "player_bullet_02.gif",
+    },
+    PlayerBulletImageData {
+        bullet_character_id: 3,
+        image_file_name: "player_bullet_03.gif",
+    },
+    PlayerBulletImageData {
+        bullet_character_id: 4,
+        image_file_name: "player_bullet_04.gif",
+    },
+    PlayerBulletImageData {
+        bullet_character_id: 5,
+        image_file_name: "player_bullet_05.gif",
+    },
+];
+
+pub fn player_bullet_image_data(
+    bullet_character_id: u16,
+) -> Option<&'static PlayerBulletImageData> {
+    PLAYER_BULLET_IMAGE_DATA
+        .iter()
+        .find(|data| data.bullet_character_id == bullet_character_id)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PlayerGrowthData {
     pub growth_level: u8,
@@ -197,7 +236,260 @@ pub struct PlayerGrowthData {
     pub bullets_per_group: u8,
     pub bullet_character_id: u16,
     pub speed: Q12_4,
+    pub visual_width: u16,
+    pub visual_height: u16,
+    pub hitbox_half_width: i16,
+    pub hitbox_half_height: i16,
+    pub move_speed: Q12_4,
     pub directions: &'static [Direction16],
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EnemyVisualData {
+    pub character_id: u16,
+    pub width: u16,
+    pub height: u16,
+}
+
+pub const ENEMY_VISUAL_DATA: &[EnemyVisualData] = &[
+    EnemyVisualData {
+        character_id: 2,
+        width: 28,
+        height: 28,
+    },
+    EnemyVisualData {
+        character_id: 3,
+        width: 36,
+        height: 30,
+    },
+    EnemyVisualData {
+        character_id: 4,
+        width: 42,
+        height: 36,
+    },
+    EnemyVisualData {
+        character_id: 5,
+        width: 32,
+        height: 42,
+    },
+    EnemyVisualData {
+        character_id: 6,
+        width: 48,
+        height: 48,
+    },
+    EnemyVisualData {
+        character_id: 100,
+        width: 80,
+        height: 80,
+    },
+    EnemyVisualData {
+        character_id: 101,
+        width: 96,
+        height: 88,
+    },
+    EnemyVisualData {
+        character_id: 102,
+        width: 104,
+        height: 96,
+    },
+    EnemyVisualData {
+        character_id: 103,
+        width: 112,
+        height: 104,
+    },
+    EnemyVisualData {
+        character_id: 104,
+        width: 120,
+        height: 112,
+    },
+    EnemyVisualData {
+        character_id: 105,
+        width: 128,
+        height: 120,
+    },
+];
+
+pub fn enemy_visual_data(character_id: u16) -> EnemyVisualData {
+    ENEMY_VISUAL_DATA
+        .iter()
+        .find(|data| data.character_id == character_id)
+        .copied()
+        .unwrap_or(EnemyVisualData {
+            character_id,
+            width: 32,
+            height: 32,
+        })
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StageEnemyImageData {
+    pub stage_id: u8,
+    pub character_id: u16,
+    pub image_file_name: &'static str,
+}
+
+pub const STAGE_ENEMY_IMAGE_DIRECTORY: &str = "assets/characters";
+
+pub const STAGE_ENEMY_IMAGE_DATA: &[StageEnemyImageData] = &[
+    StageEnemyImageData {
+        stage_id: 1,
+        character_id: 2,
+        image_file_name: "stage01_enemy_02.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 1,
+        character_id: 3,
+        image_file_name: "stage01_enemy_03.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 1,
+        character_id: 4,
+        image_file_name: "stage01_enemy_04.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 1,
+        character_id: 5,
+        image_file_name: "stage01_enemy_05.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 1,
+        character_id: 6,
+        image_file_name: "stage01_enemy_06.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 2,
+        character_id: 2,
+        image_file_name: "stage02_enemy_02.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 2,
+        character_id: 3,
+        image_file_name: "stage02_enemy_03.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 2,
+        character_id: 4,
+        image_file_name: "stage02_enemy_04.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 2,
+        character_id: 5,
+        image_file_name: "stage02_enemy_05.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 2,
+        character_id: 6,
+        image_file_name: "stage02_enemy_06.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 3,
+        character_id: 2,
+        image_file_name: "stage03_enemy_02.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 3,
+        character_id: 3,
+        image_file_name: "stage03_enemy_03.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 3,
+        character_id: 4,
+        image_file_name: "stage03_enemy_04.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 3,
+        character_id: 5,
+        image_file_name: "stage03_enemy_05.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 3,
+        character_id: 6,
+        image_file_name: "stage03_enemy_06.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 4,
+        character_id: 2,
+        image_file_name: "stage04_enemy_02.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 4,
+        character_id: 3,
+        image_file_name: "stage04_enemy_03.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 4,
+        character_id: 4,
+        image_file_name: "stage04_enemy_04.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 4,
+        character_id: 5,
+        image_file_name: "stage04_enemy_05.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 4,
+        character_id: 6,
+        image_file_name: "stage04_enemy_06.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 5,
+        character_id: 2,
+        image_file_name: "stage05_enemy_02.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 5,
+        character_id: 3,
+        image_file_name: "stage05_enemy_03.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 5,
+        character_id: 4,
+        image_file_name: "stage05_enemy_04.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 5,
+        character_id: 5,
+        image_file_name: "stage05_enemy_05.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 5,
+        character_id: 6,
+        image_file_name: "stage05_enemy_06.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 6,
+        character_id: 2,
+        image_file_name: "stage06_enemy_02.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 6,
+        character_id: 3,
+        image_file_name: "stage06_enemy_03.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 6,
+        character_id: 4,
+        image_file_name: "stage06_enemy_04.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 6,
+        character_id: 5,
+        image_file_name: "stage06_enemy_05.gif",
+    },
+    StageEnemyImageData {
+        stage_id: 6,
+        character_id: 6,
+        image_file_name: "stage06_enemy_06.gif",
+    },
+];
+
+pub fn stage_enemy_image_data(
+    stage_id: u8,
+    character_id: u16,
+) -> Option<&'static StageEnemyImageData> {
+    STAGE_ENEMY_IMAGE_DATA
+        .iter()
+        .find(|data| data.stage_id == stage_id && data.character_id == character_id)
 }
 
 const PLAYER_DIRECTIONS_LEVEL_0: &[Direction16] = &[Direction16::North];
@@ -228,38 +520,63 @@ pub const PLAYER_GROWTH_DATA: &[PlayerGrowthData] = &[
         bullets_per_group: 1,
         bullet_character_id: 1,
         speed: Q12_4(64),
+        visual_width: 28,
+        visual_height: 28,
+        hitbox_half_width: 128,
+        hitbox_half_height: 128,
+        move_speed: Q12_4(32),
         directions: PLAYER_DIRECTIONS_LEVEL_0,
     },
     PlayerGrowthData {
         growth_level: 1,
         max_bullet_groups: 6,
         bullets_per_group: 2,
-        bullet_character_id: 1,
+        bullet_character_id: 2,
         speed: Q12_4(67),
+        visual_width: 30,
+        visual_height: 30,
+        hitbox_half_width: 144,
+        hitbox_half_height: 144,
+        move_speed: Q12_4(36),
         directions: PLAYER_DIRECTIONS_LEVEL_1,
     },
     PlayerGrowthData {
         growth_level: 2,
         max_bullet_groups: 8,
         bullets_per_group: 3,
-        bullet_character_id: 1,
+        bullet_character_id: 3,
         speed: Q12_4(70),
+        visual_width: 32,
+        visual_height: 32,
+        hitbox_half_width: 160,
+        hitbox_half_height: 160,
+        move_speed: Q12_4(40),
         directions: PLAYER_DIRECTIONS_LEVEL_2,
     },
     PlayerGrowthData {
         growth_level: 3,
         max_bullet_groups: 10,
         bullets_per_group: 4,
-        bullet_character_id: 1,
+        bullet_character_id: 4,
         speed: Q12_4(74),
+        visual_width: 36,
+        visual_height: 36,
+        hitbox_half_width: 176,
+        hitbox_half_height: 176,
+        move_speed: Q12_4(44),
         directions: PLAYER_DIRECTIONS_LEVEL_3,
     },
     PlayerGrowthData {
         growth_level: 4,
         max_bullet_groups: 12,
         bullets_per_group: 5,
-        bullet_character_id: 1,
+        bullet_character_id: 5,
         speed: Q12_4(77),
+        visual_width: 40,
+        visual_height: 40,
+        hitbox_half_width: 192,
+        hitbox_half_height: 192,
+        move_speed: Q12_4(48),
         directions: PLAYER_DIRECTIONS_LEVEL_4,
     },
 ];
@@ -366,6 +683,116 @@ pub const BULLET_CHARACTER_DATA: &[BulletCharacterData] = &[
         damage: 1,
         penetrating: false,
         player_damage: 15,
+    },
+    BulletCharacterData {
+        bullet_character_id: 6,
+        fire_sound_id: 1,
+        hit_sound_id: 2,
+        hitbox_width: 8,
+        hitbox_height: 8,
+        damage: 1,
+        penetrating: false,
+        player_damage: 10,
+    },
+    BulletCharacterData {
+        bullet_character_id: 7,
+        fire_sound_id: 1,
+        hit_sound_id: 2,
+        hitbox_width: 8,
+        hitbox_height: 8,
+        damage: 1,
+        penetrating: false,
+        player_damage: 12,
+    },
+    BulletCharacterData {
+        bullet_character_id: 8,
+        fire_sound_id: 1,
+        hit_sound_id: 2,
+        hitbox_width: 10,
+        hitbox_height: 10,
+        damage: 2,
+        penetrating: false,
+        player_damage: 15,
+    },
+    BulletCharacterData {
+        bullet_character_id: 9,
+        fire_sound_id: 1,
+        hit_sound_id: 2,
+        hitbox_width: 8,
+        hitbox_height: 12,
+        damage: 2,
+        penetrating: false,
+        player_damage: 18,
+    },
+    BulletCharacterData {
+        bullet_character_id: 10,
+        fire_sound_id: 1,
+        hit_sound_id: 2,
+        hitbox_width: 12,
+        hitbox_height: 8,
+        damage: 3,
+        penetrating: false,
+        player_damage: 20,
+    },
+    BulletCharacterData {
+        bullet_character_id: 11,
+        fire_sound_id: 1,
+        hit_sound_id: 2,
+        hitbox_width: 12,
+        hitbox_height: 12,
+        damage: 3,
+        penetrating: false,
+        player_damage: 25,
+    },
+    BulletCharacterData {
+        bullet_character_id: 12,
+        fire_sound_id: 1,
+        hit_sound_id: 2,
+        hitbox_width: 14,
+        hitbox_height: 10,
+        damage: 3,
+        penetrating: false,
+        player_damage: 30,
+    },
+    BulletCharacterData {
+        bullet_character_id: 13,
+        fire_sound_id: 1,
+        hit_sound_id: 2,
+        hitbox_width: 10,
+        hitbox_height: 14,
+        damage: 4,
+        penetrating: false,
+        player_damage: 35,
+    },
+    BulletCharacterData {
+        bullet_character_id: 14,
+        fire_sound_id: 1,
+        hit_sound_id: 2,
+        hitbox_width: 16,
+        hitbox_height: 12,
+        damage: 4,
+        penetrating: false,
+        player_damage: 40,
+    },
+    BulletCharacterData {
+        bullet_character_id: 15,
+        fire_sound_id: 1,
+        hit_sound_id: 2,
+        hitbox_width: 12,
+        hitbox_height: 16,
+        damage: 5,
+        penetrating: false,
+        player_damage: 45,
+    },
+    BulletCharacterData {
+        bullet_character_id: 16,
+        fire_sound_id: 1,
+        hit_sound_id: 2,
+        hitbox_width: 16,
+        hitbox_height: 16,
+        damage: 5,
+        penetrating: false,
+        player_damage: 50,
     },
 ];
 
@@ -600,7 +1027,7 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
         score: 100,
         default_orbit_id: 1,
         default_fire_pattern_id: 1,
-        bullet_character_id: 2,
+        bullet_character_id: 6,
         growth_effect_id: 0,
         destroy_effect_id: 1,
         destroy_sound_id: 3,
@@ -618,7 +1045,7 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
         score: 150,
         default_orbit_id: 4,
         default_fire_pattern_id: 2,
-        bullet_character_id: 2,
+        bullet_character_id: 7,
         growth_effect_id: 0,
         destroy_effect_id: 1,
         destroy_sound_id: 3,
@@ -636,7 +1063,7 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
         score: 300,
         default_orbit_id: 1,
         default_fire_pattern_id: 4,
-        bullet_character_id: 5,
+        bullet_character_id: 8,
         growth_effect_id: 0,
         destroy_effect_id: 1,
         destroy_sound_id: 3,
@@ -654,7 +1081,7 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
         score: 250,
         default_orbit_id: 6,
         default_fire_pattern_id: 3,
-        bullet_character_id: 2,
+        bullet_character_id: 9,
         growth_effect_id: 0,
         destroy_effect_id: 1,
         destroy_sound_id: 3,
@@ -672,7 +1099,7 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
         score: 2_000,
         default_orbit_id: 7,
         default_fire_pattern_id: 10,
-        bullet_character_id: 3,
+        bullet_character_id: 10,
         growth_effect_id: 0,
         destroy_effect_id: 2,
         destroy_sound_id: 3,
@@ -690,7 +1117,7 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
         score: 10_000,
         default_orbit_id: 3,
         default_fire_pattern_id: 10,
-        bullet_character_id: 2,
+        bullet_character_id: 11,
         growth_effect_id: 0,
         destroy_effect_id: 2,
         destroy_sound_id: 3,
@@ -708,7 +1135,7 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
         score: 15_000,
         default_orbit_id: 3,
         default_fire_pattern_id: 11,
-        bullet_character_id: 3,
+        bullet_character_id: 12,
         growth_effect_id: 0,
         destroy_effect_id: 2,
         destroy_sound_id: 3,
@@ -726,7 +1153,7 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
         score: 20_000,
         default_orbit_id: 3,
         default_fire_pattern_id: 12,
-        bullet_character_id: 5,
+        bullet_character_id: 13,
         growth_effect_id: 0,
         destroy_effect_id: 2,
         destroy_sound_id: 3,
@@ -744,7 +1171,7 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
         score: 25_000,
         default_orbit_id: 3,
         default_fire_pattern_id: 13,
-        bullet_character_id: 3,
+        bullet_character_id: 14,
         growth_effect_id: 0,
         destroy_effect_id: 2,
         destroy_sound_id: 3,
@@ -762,7 +1189,7 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
         score: 30_000,
         default_orbit_id: 3,
         default_fire_pattern_id: 14,
-        bullet_character_id: 5,
+        bullet_character_id: 15,
         growth_effect_id: 0,
         destroy_effect_id: 2,
         destroy_sound_id: 3,
@@ -780,7 +1207,7 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
         score: 50_000,
         default_orbit_id: 3,
         default_fire_pattern_id: 15,
-        bullet_character_id: 3,
+        bullet_character_id: 16,
         growth_effect_id: 0,
         destroy_effect_id: 2,
         destroy_sound_id: 3,
@@ -1500,6 +1927,18 @@ pub fn stage_schedule(stage_id: u8) -> impl Iterator<Item = &'static ScheduleDat
         .filter(move |schedule| schedule.stage_id == stage_id)
 }
 
+pub fn stage_enemy_character_ids(stage_id: u8) -> Vec<u16> {
+    let mut character_ids = Vec::new();
+    for schedule in stage_schedule(stage_id) {
+        if schedule.object_type == ObjectType::Enemy
+            && !character_ids.contains(&schedule.character_id)
+        {
+            character_ids.push(schedule.character_id);
+        }
+    }
+    character_ids
+}
+
 pub const ORBIT_DATA: &[OrbitData] = &[
     OrbitData {
         orbit_id: 1,
@@ -1770,18 +2209,48 @@ mod tests {
 
     #[test]
     fn player_growth_data_defines_bullet_groups_and_types() {
-        let level_zero = player_growth_data(0);
-        let level_four = player_growth_data(4);
+        let levels = (0..=4).map(player_growth_data).collect::<Vec<_>>();
 
-        assert_eq!(level_zero.max_bullet_groups, 4);
-        assert_eq!(level_zero.bullets_per_group, 1);
-        assert_eq!(level_zero.bullet_character_id, 1);
-        assert_eq!(level_four.max_bullet_groups, 12);
-        assert_eq!(level_four.bullets_per_group, 5);
-        assert_eq!(level_four.bullet_character_id, 1);
-        assert_eq!(level_four.speed, Q12_4(77));
-        assert_eq!(level_four.directions.len(), 5);
-        assert_eq!(level_four.directions[2], Direction16::North);
+        assert_eq!(levels[0].max_bullet_groups, 4);
+        assert_eq!(levels[0].bullets_per_group, 1);
+        assert_eq!(
+            levels
+                .iter()
+                .map(|data| data.bullet_character_id)
+                .collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5]
+        );
+        assert_eq!(levels[4].max_bullet_groups, 12);
+        assert_eq!(levels[4].bullets_per_group, 5);
+        assert_eq!(levels[4].speed, Q12_4(77));
+        assert_eq!(levels[4].directions.len(), 5);
+        assert_eq!(levels[4].directions[2], Direction16::North);
+    }
+
+    #[test]
+    fn enemy_traits_define_their_bullet_types() {
+        assert_eq!(character_trait(2).unwrap().bullet_character_id, 6);
+        assert_eq!(character_trait(4).unwrap().bullet_character_id, 8);
+        assert_eq!(character_trait(105).unwrap().bullet_character_id, 16);
+    }
+
+    #[test]
+    fn stages_define_enemy_ids_from_their_schedules() {
+        assert_eq!(stage_enemy_character_ids(1), vec![2]);
+        assert_eq!(stage_enemy_character_ids(2), vec![3, 4]);
+        assert_eq!(stage_enemy_character_ids(3), vec![5]);
+        assert_eq!(stage_enemy_character_ids(4), vec![4, 6]);
+        assert_eq!(stage_enemy_character_ids(5), vec![5, 6]);
+        assert_eq!(stage_enemy_character_ids(6), vec![6, 4]);
+    }
+
+    #[test]
+    fn stage_enemy_image_paths_are_data_driven() {
+        assert_eq!(
+            stage_enemy_image_data(1, 2).unwrap().image_file_name,
+            "stage01_enemy_02.gif"
+        );
+        assert!(stage_enemy_image_data(99, 2).is_none());
     }
 
     #[test]

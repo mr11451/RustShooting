@@ -2,13 +2,15 @@
 
 実装検証用の仮データです。本番素材へ差し替える場合も、定義ファイルのパスと ID 対応を維持します。
 
-- `characters/player.gif`: 64x32、32x32 タイル 2 列のキャラ用スプライトシート
-- `characters/enemy_basic.gif`: 64x32、32x32 タイル 2 列の敵キャラ用スプライトシート
+- `characters/player_level_00.gif` ～ `player_level_04.gif`: 成長レベル別の64x32、32x32タイル2フレーム自機スプライト
+- `characters/stage01_enemy_02.gif` ～ `stage06_enemy_06.gif`: ステージ・敵IDごとの2フレーム仮アニメーション
 - `characters/boss.gif`: 64x32、32x32 タイル 2 列のボス用スプライトシート
 - `characters/growth_item.gif`: 64x32、32x32 タイル 2 列の成長アイテム用スプライトシート
 - `bullets/bullets.gif`: 96x32、32x32 タイル 3 列の自弾・敵弾用スプライトシート
-- `bullets/enemy_bullets.gif`: 16x8、8x8 タイル 2 列の敵弾用スプライトシート
+- `bullets/enemy_bullet_06.gif` ～ `enemy_bullet_16.gif`: 敵弾IDごとの16x8、8x8タイル2フレームアニメーション
 - `backgrounds/stage01_atlas.png`: 64x64 の背景タイルアトラス
+- `backgrounds/stage02_atlas.png` ～ `stage06_atlas.png`: ステージ2～6用の64x64背景タイルアトラス
+- `audio/stage02_bgm.wav` ～ `stage06_bgm.wav`: ステージ2～6用の仮BGM
 - `audio/stage01_bgm.wav`: ステージ1用の仮BGM
 - `audio/fire.wav`: 発射効果音
 - `audio/hit.wav`: 命中効果音

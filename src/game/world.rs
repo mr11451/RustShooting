@@ -104,6 +104,16 @@ impl World {
         })
     }
 
+    fn player_hitbox(&self) -> Hitbox {
+        let data = player_growth_data(self.growth_level);
+        Hitbox {
+            x: self.player_x,
+            y: self.player_y,
+            half_width: crate::fixed::Q12_4(data.hitbox_half_width),
+            half_height: crate::fixed::Q12_4(data.hitbox_half_height),
+        }
+    }
+
     fn bullet_hitbox(
         character_id: u16,
         x: crate::fixed::Q12_4,
@@ -282,7 +292,9 @@ impl World {
                     && enemy.orbit_frame == pattern.fire_frame
                 {
                     bullets.push(crate::runtime::ObjectState {
-                        character_id: pattern.bullet_character_id,
+                        character_id: character_trait(enemy.character_id)
+                            .map(|data| data.bullet_character_id)
+                            .unwrap_or(6),
                         x: enemy.x + pattern.spawn_offset_x,
                         y: enemy.y + pattern.spawn_offset_y,
                         velocity_x: pattern.velocity().0,
@@ -299,13 +311,14 @@ impl World {
     }
 
     pub fn update_player(&mut self, move_x: i8, move_y: i8) {
+        let move_speed = player_growth_data(self.growth_level).move_speed.raw();
         self.player_x = Self::clamp_q12(
-            self.player_x + crate::fixed::Q12_4(i16::from(move_x) * 32),
+            self.player_x + crate::fixed::Q12_4(i16::from(move_x) * move_speed),
             0,
             SCREEN_WIDTH_Q12.raw(),
         );
         self.player_y = Self::clamp_q12(
-            self.player_y + crate::fixed::Q12_4(i16::from(move_y) * 32),
+            self.player_y + crate::fixed::Q12_4(i16::from(move_y) * move_speed),
             0,
             SCREEN_HEIGHT_Q12.raw(),
         );
@@ -372,8 +385,7 @@ impl World {
     }
 
     pub fn update_items(&mut self) {
-        let player_box = Self::character_hitbox(1, self.player_x, self.player_y)
-            .expect("player character trait should exist");
+        let player_box = self.player_hitbox();
         let mut collected = 0u8;
         self.items.for_each_active_mut(|item| {
             item.y += item.velocity_y;
@@ -529,8 +541,7 @@ impl World {
             return;
         }
 
-        let player_box = Self::character_hitbox(1, self.player_x, self.player_y)
-            .expect("player character trait should exist");
+        let player_box = self.player_hitbox();
         let enemy_snapshots = self.collision_snapshots(&self.enemies);
         let bullet_snapshots = self.collision_snapshots(&self.enemy_bullets);
         let mut damage = None;
@@ -620,13 +631,19 @@ impl World {
     }
 
     fn spawn_schedule_entry(&mut self, schedule: &ScheduleData) {
-        let Some(trait_data) = character_trait(schedule.character_id) else {
+        let character_id = schedule.character_id;
+        let Some(trait_data) = character_trait(character_id) else {
             return;
         };
+        let fire_pattern_id = if schedule.fire_pattern_id == 0 {
+            trait_data.default_fire_pattern_id
+        } else {
+            schedule.fire_pattern_id
+        };
         let mut object = crate::runtime::ObjectState {
-            character_id: schedule.character_id,
+            character_id,
             orbit_id: schedule.orbit_id,
-            fire_pattern_id: schedule.fire_pattern_id,
+            fire_pattern_id,
             x: schedule.spawn_x,
             y: schedule.spawn_y,
             orbit_origin_x: schedule.spawn_x,

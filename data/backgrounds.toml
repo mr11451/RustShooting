@@ -15,3 +15,73 @@ geometry_layer_id = 1
 # tile_id 0 is empty. This compact map is the first test chunk.
 chunk_rows = 4
 tile_map_path = "data/stage01_tilemap.txt"
+
+[background.stage02]
+background_id = 2
+tile_atlas_path = "assets/backgrounds/stage02_atlas.png"
+tile_width = 16
+tile_height = 16
+atlas_columns = 4
+atlas_rows = 4
+map_width = 40
+map_height = 338
+scroll_speed_q12_4 = 20
+geometry_layer_id = 1
+chunk_rows = 4
+tile_map_path = "data/stage02_tilemap.txt"
+
+[background.stage03]
+background_id = 3
+tile_atlas_path = "assets/backgrounds/stage03_atlas.png"
+tile_width = 16
+tile_height = 16
+atlas_columns = 4
+atlas_rows = 4
+map_width = 40
+map_height = 338
+scroll_speed_q12_4 = 24
+geometry_layer_id = 1
+chunk_rows = 4
+tile_map_path = "data/stage03_tilemap.txt"
+
+[background.stage04]
+background_id = 4
+tile_atlas_path = "assets/backgrounds/stage04_atlas.png"
+tile_width = 16
+tile_height = 16
+atlas_columns = 4
+atlas_rows = 4
+map_width = 40
+map_height = 338
+scroll_speed_q12_4 = 28
+geometry_layer_id = 1
+chunk_rows = 4
+tile_map_path = "data/stage04_tilemap.txt"
+
+[background.stage05]
+background_id = 5
+tile_atlas_path = "assets/backgrounds/stage05_atlas.png"
+tile_width = 16
+tile_height = 16
+atlas_columns = 4
+atlas_rows = 4
+map_width = 40
+map_height = 338
+scroll_speed_q12_4 = 32
+geometry_layer_id = 1
+chunk_rows = 4
+tile_map_path = "data/stage05_tilemap.txt"
+
+[background.stage06]
+background_id = 6
+tile_atlas_path = "assets/backgrounds/stage06_atlas.png"
+tile_width = 16
+tile_height = 16
+atlas_columns = 4
+atlas_rows = 4
+map_width = 40
+map_height = 338
+scroll_speed_q12_4 = 36
+geometry_layer_id = 1
+chunk_rows = 4
+tile_map_path = "data/stage06_tilemap.txt"

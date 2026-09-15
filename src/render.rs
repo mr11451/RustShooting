@@ -1,7 +1,10 @@
 use crate::{
     assets::AssetCatalog,
     background::TileMap,
-    data::{HUD_Y, LOGICAL_HEIGHT, LOGICAL_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH},
+    data::{
+        HUD_Y, LOGICAL_HEIGHT, LOGICAL_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH, enemy_visual_data,
+        player_growth_data, stage_enemy_character_ids,
+    },
     game::{
         GameState, World,
         name_entry::{CHAR_MATRIX, GridKey},
@@ -98,17 +101,76 @@ pub struct GpuRenderer {
     pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     texture_pipeline: wgpu::RenderPipeline,
-    player_bind_groups: [wgpu::BindGroup; 2],
-    enemy_bind_groups: [wgpu::BindGroup; 2],
+    player_bind_groups: Vec<[wgpu::BindGroup; 2]>,
+    enemy_bind_groups: Vec<Vec<[wgpu::BindGroup; 2]>>,
+    enemy_character_ids: Vec<Vec<u16>>,
     boss_bind_groups: [wgpu::BindGroup; 2],
     item_bind_groups: [wgpu::BindGroup; 2],
-    bullet_player_bind_group: wgpu::BindGroup,
-    bullet_pierce_bind_group: wgpu::BindGroup,
-    enemy_bullet_bind_groups: [wgpu::BindGroup; 2],
+    player_bullet_bind_groups: Vec<[wgpu::BindGroup; 2]>,
+    enemy_bullet_bind_groups: Vec<[wgpu::BindGroup; 2]>,
     sprite_vertex_buffer: wgpu::Buffer,
-    background_bind_group: wgpu::BindGroup,
+    background_bind_groups: Vec<wgpu::BindGroup>,
     background_vertex_buffer: wgpu::Buffer,
-    background_map: TileMap,
+    background_maps: Vec<TileMap>,
+}
+
+fn create_background_bind_group(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    layout: &wgpu::BindGroupLayout,
+    sampler: &wgpu::Sampler,
+    image: &image::RgbaImage,
+    stage_id: u8,
+) -> wgpu::BindGroup {
+    let (width, height) = image.dimensions();
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(&format!("stage {stage_id} background atlas")),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        image.as_raw(),
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 4),
+            rows_per_image: Some(height),
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some(&format!("stage {stage_id} background bind group")),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+        ],
+    })
 }
 
 fn create_frame_bind_group(
@@ -289,6 +351,7 @@ impl GpuRenderer {
 
         let stage_assets = AssetCatalog::load_stage_one()
             .map_err(|error| format!("failed to load stage one assets: {error}"))?;
+        let enemy_character_ids = (1..=6).map(stage_enemy_character_ids).collect();
 
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("nearest sprite sampler"),
@@ -321,59 +384,71 @@ impl GpuRenderer {
                 ],
             });
 
-        let player_frame_0 = stage_assets
-            .player_sheet
-            .frame(0, 0)
-            .ok_or("player frame 0 missing")?;
-        let player_frame_1 = stage_assets
-            .player_sheet
-            .frame(0, 1)
-            .unwrap_or(player_frame_0);
-        let player_bind_groups = [
-            create_frame_bind_group(
-                &device,
-                &queue,
-                &texture_bind_group_layout,
-                &sampler,
-                "player 0",
-                player_frame_0,
-            ),
-            create_frame_bind_group(
-                &device,
-                &queue,
-                &texture_bind_group_layout,
-                &sampler,
-                "player 1",
-                player_frame_1,
-            ),
-        ];
+        let player_bind_groups = stage_assets
+            .player_variant_sheets
+            .iter()
+            .enumerate()
+            .map(|(level, sheet)| {
+                let frame_0 = sheet
+                    .frame(0, 0)
+                    .ok_or(format!("player level {level} frame 0 missing"))?;
+                let frame_1 = sheet.frame(0, 1).unwrap_or(frame_0);
+                Ok([
+                    create_frame_bind_group(
+                        &device,
+                        &queue,
+                        &texture_bind_group_layout,
+                        &sampler,
+                        &format!("player level {level} frame 0"),
+                        frame_0,
+                    ),
+                    create_frame_bind_group(
+                        &device,
+                        &queue,
+                        &texture_bind_group_layout,
+                        &sampler,
+                        &format!("player level {level} frame 1"),
+                        frame_1,
+                    ),
+                ])
+            })
+            .collect::<Result<Vec<_>, String>>()?;
 
-        let enemy_frame_0 = stage_assets
-            .enemy_sheet
-            .frame(0, 0)
-            .ok_or("enemy frame 0 missing")?;
-        let enemy_frame_1 = stage_assets
-            .enemy_sheet
-            .frame(0, 1)
-            .unwrap_or(enemy_frame_0);
-        let enemy_bind_groups = [
-            create_frame_bind_group(
-                &device,
-                &queue,
-                &texture_bind_group_layout,
-                &sampler,
-                "enemy 0",
-                enemy_frame_0,
-            ),
-            create_frame_bind_group(
-                &device,
-                &queue,
-                &texture_bind_group_layout,
-                &sampler,
-                "enemy 1",
-                enemy_frame_1,
-            ),
-        ];
+        let enemy_bind_groups = stage_assets
+            .stage_enemy_sheets
+            .iter()
+            .enumerate()
+            .map(|(stage_index, sheets)| {
+                sheets
+                    .iter()
+                    .enumerate()
+                    .map(|(variant, sheet)| {
+                        let frame_0 = sheet.frame(0, 0).ok_or(format!(
+                            "stage {stage_index} enemy variant {variant} frame 0 missing"
+                        ))?;
+                        let frame_1 = sheet.frame(0, 1).unwrap_or(frame_0);
+                        Ok([
+                            create_frame_bind_group(
+                                &device,
+                                &queue,
+                                &texture_bind_group_layout,
+                                &sampler,
+                                &format!("stage {stage_index} enemy variant {variant} frame 0"),
+                                frame_0,
+                            ),
+                            create_frame_bind_group(
+                                &device,
+                                &queue,
+                                &texture_bind_group_layout,
+                                &sampler,
+                                &format!("stage {stage_index} enemy variant {variant} frame 1"),
+                                frame_1,
+                            ),
+                        ])
+                    })
+                    .collect::<Result<Vec<_>, String>>()
+            })
+            .collect::<Result<Vec<_>, String>>()?;
 
         let boss_frame_0 = stage_assets
             .boss_sheet
@@ -423,107 +498,83 @@ impl GpuRenderer {
             ),
         ];
 
-        let bullet_frame_0 = stage_assets
-            .bullet_sheet
-            .frame(0, 0)
-            .ok_or("bullet frame 0 missing")?;
-        let bullet_frame_1 = stage_assets
-            .bullet_sheet
-            .frame(0, 1)
-            .unwrap_or(bullet_frame_0);
-        let bullet_player_bind_group = create_frame_bind_group(
-            &device,
-            &queue,
-            &texture_bind_group_layout,
-            &sampler,
-            "bullet player",
-            bullet_frame_0,
-        );
-        let bullet_pierce_bind_group = create_frame_bind_group(
-            &device,
-            &queue,
-            &texture_bind_group_layout,
-            &sampler,
-            "bullet pierce",
-            bullet_frame_1,
-        );
-        let enemy_bullet_frame_0 = stage_assets
-            .enemy_bullet_sheet
-            .frame(0, 0)
-            .ok_or("enemy bullet frame 0 missing")?;
-        let enemy_bullet_frame_1 = stage_assets
-            .enemy_bullet_sheet
-            .frame(0, 1)
-            .ok_or("enemy bullet frame 1 missing")?;
-        let enemy_bullet_bind_groups = [
-            create_frame_bind_group(
+        let player_bullet_bind_groups = stage_assets
+            .player_bullet_sheets
+            .iter()
+            .enumerate()
+            .map(|(variant, sheet)| {
+                let frame_0 = sheet
+                    .frame(0, 0)
+                    .ok_or(format!("player bullet {variant} frame 0 missing"))?;
+                let frame_1 = sheet.frame(0, 1).unwrap_or(frame_0);
+                Ok([
+                    create_frame_bind_group(
+                        &device,
+                        &queue,
+                        &texture_bind_group_layout,
+                        &sampler,
+                        &format!("player bullet {variant} frame 0"),
+                        frame_0,
+                    ),
+                    create_frame_bind_group(
+                        &device,
+                        &queue,
+                        &texture_bind_group_layout,
+                        &sampler,
+                        &format!("player bullet {variant} frame 1"),
+                        frame_1,
+                    ),
+                ])
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        let enemy_bullet_bind_groups = stage_assets
+            .enemy_bullet_variant_sheets
+            .iter()
+            .enumerate()
+            .map(|(variant, sheet)| {
+                let frame_0 = sheet
+                    .frame(0, 0)
+                    .ok_or(format!("enemy bullet variant {variant} frame 0 missing"))?;
+                let frame_1 = sheet.frame(0, 1).unwrap_or(frame_0);
+                Ok([
+                    create_frame_bind_group(
+                        &device,
+                        &queue,
+                        &texture_bind_group_layout,
+                        &sampler,
+                        &format!("enemy bullet variant {variant} frame 0"),
+                        frame_0,
+                    ),
+                    create_frame_bind_group(
+                        &device,
+                        &queue,
+                        &texture_bind_group_layout,
+                        &sampler,
+                        &format!("enemy bullet variant {variant} frame 1"),
+                        frame_1,
+                    ),
+                ])
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        let mut background_bind_groups = Vec::with_capacity(6);
+        let mut background_maps = Vec::with_capacity(6);
+        for stage_id in 1..=6 {
+            let assets = AssetCatalog::load_stage_id(stage_id)
+                .map_err(|error| format!("failed to load stage {stage_id} assets: {error}"))?;
+            background_bind_groups.push(create_background_bind_group(
                 &device,
                 &queue,
                 &texture_bind_group_layout,
                 &sampler,
-                "enemy bullet 0",
-                enemy_bullet_frame_0,
-            ),
-            create_frame_bind_group(
-                &device,
-                &queue,
-                &texture_bind_group_layout,
-                &sampler,
-                "enemy bullet 1",
-                enemy_bullet_frame_1,
-            ),
-        ];
-        let background_image = stage_assets.background_atlas;
-        let (background_width, background_height) = background_image.dimensions();
-        let background_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("stage 1 background atlas"),
-            size: wgpu::Extent3d {
-                width: background_width,
-                height: background_height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &background_texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            background_image.as_raw(),
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(background_width * 4),
-                rows_per_image: Some(background_height),
-            },
-            wgpu::Extent3d {
-                width: background_width,
-                height: background_height,
-                depth_or_array_layers: 1,
-            },
-        );
-        let background_view =
-            background_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let background_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("stage 1 background bind group"),
-            layout: &texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&background_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-        });
+                &assets.background_atlas,
+                stage_id,
+            ));
+            background_maps.push(
+                TileMap::from_text_file(format!("data/stage{:02}_tilemap.txt", stage_id)).map_err(
+                    |error| format!("failed to load stage {stage_id} tile map: {error}"),
+                )?,
+            );
+        }
         let texture_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("sprite texture shader"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
@@ -597,8 +648,6 @@ impl GpuRenderer {
             multiview: None,
             cache: None,
         });
-        let background_map = TileMap::from_text_file("data/stage01_tilemap.txt")
-            .map_err(|error| format!("failed to load stage one tile map: {error}"))?;
         let background_vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("stage 1 background vertices"),
             size: (MAX_BACKGROUND_VERTICES * std::mem::size_of::<TextureVertex>()) as u64,
@@ -615,15 +664,15 @@ impl GpuRenderer {
             texture_pipeline,
             player_bind_groups,
             enemy_bind_groups,
+            enemy_character_ids,
             boss_bind_groups,
             item_bind_groups,
-            bullet_player_bind_group,
-            bullet_pierce_bind_group,
+            player_bullet_bind_groups,
             enemy_bullet_bind_groups,
             sprite_vertex_buffer,
-            background_bind_group,
+            background_bind_groups,
             background_vertex_buffer,
-            background_map,
+            background_maps,
         })
     }
 
@@ -667,8 +716,11 @@ impl GpuRenderer {
         }
 
         // Update background scroll
-        let background_vertices =
-            background_tile_vertices(world.background_scroll.raw(), &self.background_map);
+        let background_index = usize::from(world.stage_id.saturating_sub(1)).min(5);
+        let background_vertices = background_tile_vertices(
+            world.background_scroll.raw(),
+            &self.background_maps[background_index],
+        );
         if !background_vertices.is_empty() {
             let write_len = background_vertices.len().min(MAX_BACKGROUND_VERTICES);
             self.queue.write_buffer(
@@ -699,22 +751,29 @@ impl GpuRenderer {
         let mut all_sprite_vertices: Vec<TextureVertex> = Vec::new();
 
         // 1. Enemy sprites
-        let enemy_start = all_sprite_vertices.len();
-        world.enemies.for_each_active(|e| {
-            if e.character_id < 100 {
-                let x = e.x.raw() as f32 / 16.0;
-                let y = e.y.raw() as f32 / 16.0;
-                let size = if e.character_id == 6 { 48.0 } else { 32.0 };
-                push_texture_quad(
-                    &mut all_sprite_vertices,
-                    x - size / 2.0,
-                    y - size / 2.0,
-                    size,
-                    size,
-                );
-            }
-        });
-        let enemy_end = all_sprite_vertices.len();
+        let stage_index = usize::from(world.stage_id.saturating_sub(1)).min(5);
+        let stage_enemy_ids = &self.enemy_character_ids[stage_index];
+        let mut enemy_ranges = vec![(0usize, 0usize); stage_enemy_ids.len()];
+        for (variant, character_id) in stage_enemy_ids.iter().copied().enumerate() {
+            let start = all_sprite_vertices.len();
+            world.enemies.for_each_active(|e| {
+                if e.character_id == character_id {
+                    let x = e.x.raw() as f32 / 16.0;
+                    let y = e.y.raw() as f32 / 16.0;
+                    let visual = enemy_visual_data(character_id);
+                    let width = visual.width as f32;
+                    let height = visual.height as f32;
+                    push_texture_quad(
+                        &mut all_sprite_vertices,
+                        x - width / 2.0,
+                        y - height / 2.0,
+                        width,
+                        height,
+                    );
+                }
+            });
+            enemy_ranges[variant] = (start, all_sprite_vertices.len());
+        }
 
         // 2. Boss sprites
         let boss_start = all_sprite_vertices.len();
@@ -722,21 +781,15 @@ impl GpuRenderer {
             if e.character_id >= 100 && e.character_id <= 105 {
                 let x = e.x.raw() as f32 / 16.0;
                 let y = e.y.raw() as f32 / 16.0;
-                // Draw large boss sprite
-                let size = match e.character_id {
-                    100 => 80.0,
-                    101 => 96.0,
-                    102 => 104.0,
-                    103 => 112.0,
-                    104 => 120.0,
-                    _ => 128.0,
-                };
+                let visual = enemy_visual_data(e.character_id);
+                let width = visual.width as f32;
+                let height = visual.height as f32;
                 push_texture_quad(
                     &mut all_sprite_vertices,
-                    x - size / 2.0,
-                    y - size / 2.0,
-                    size,
-                    size,
+                    x - width / 2.0,
+                    y - height / 2.0,
+                    width,
+                    height,
                 );
             }
         });
@@ -751,54 +804,45 @@ impl GpuRenderer {
         });
         let item_end = all_sprite_vertices.len();
 
-        // 4. Bullet sprites (player regular, player pierce, enemy)
-        let bullet_p_start = all_sprite_vertices.len();
-        world.player_bullets.for_each_active(|b| {
-            if b.character_id != 4 {
-                let x = b.x.raw() as f32 / 16.0;
-                let y = b.y.raw() as f32 / 16.0;
-                push_texture_quad(&mut all_sprite_vertices, x - 8.0, y - 16.0, 16.0, 32.0);
-            }
-        });
-        let bullet_p_end = all_sprite_vertices.len();
+        // 4. Bullet sprites (player variants, enemy)
+        let player_bullet_ids = [1u16, 2, 3, 4, 5];
+        let mut player_bullet_ranges = [(0usize, 0usize); 5];
+        for (variant, character_id) in player_bullet_ids.into_iter().enumerate() {
+            let start = all_sprite_vertices.len();
+            world.player_bullets.for_each_active(|b| {
+                if b.character_id == character_id {
+                    let x = b.x.raw() as f32 / 16.0;
+                    let y = b.y.raw() as f32 / 16.0;
+                    push_texture_quad(&mut all_sprite_vertices, x - 8.0, y - 8.0, 16.0, 16.0);
+                }
+            });
+            player_bullet_ranges[variant] = (start, all_sprite_vertices.len());
+        }
 
-        let bullet_pierce_start = all_sprite_vertices.len();
-        world.player_bullets.for_each_active(|b| {
-            if b.character_id == 4 {
-                let x = b.x.raw() as f32 / 16.0;
-                let y = b.y.raw() as f32 / 16.0;
-                push_texture_quad(&mut all_sprite_vertices, x - 8.0, y - 16.0, 16.0, 32.0);
-            }
-        });
-        let bullet_pierce_end = all_sprite_vertices.len();
-
-        let bullet_e0_start = all_sprite_vertices.len();
-        world.enemy_bullets.for_each_active(|b| {
-            if b.character_id != 5 {
-                let x = b.x.raw() as f32 / 16.0;
-                let y = b.y.raw() as f32 / 16.0;
-                push_texture_quad(&mut all_sprite_vertices, x - 4.0, y - 4.0, 8.0, 8.0);
-            }
-        });
-        let bullet_e0_end = all_sprite_vertices.len();
-
-        let bullet_e1_start = all_sprite_vertices.len();
-        world.enemy_bullets.for_each_active(|b| {
-            if b.character_id == 5 {
-                let x = b.x.raw() as f32 / 16.0;
-                let y = b.y.raw() as f32 / 16.0;
-                push_texture_quad(&mut all_sprite_vertices, x - 4.0, y - 4.0, 8.0, 8.0);
-            }
-        });
-        let bullet_e1_end = all_sprite_vertices.len();
+        let enemy_bullet_ids = [6u16, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        let mut enemy_bullet_ranges = [(0usize, 0usize); 11];
+        for (variant, character_id) in enemy_bullet_ids.into_iter().enumerate() {
+            let start = all_sprite_vertices.len();
+            world.enemy_bullets.for_each_active(|b| {
+                if b.character_id == character_id {
+                    let x = b.x.raw() as f32 / 16.0;
+                    let y = b.y.raw() as f32 / 16.0;
+                    push_texture_quad(&mut all_sprite_vertices, x - 4.0, y - 4.0, 8.0, 8.0);
+                }
+            });
+            enemy_bullet_ranges[variant] = (start, all_sprite_vertices.len());
+        }
 
         // 5. Player sprite
         let player_start = all_sprite_vertices.len();
         let show_player = world.invincible_frames == 0 || (world.invincible_frames % 4 < 2);
         if show_player && world.hp > 0 && world.lives > 0 {
-            let px = (world.player_x.raw() as f32 / 16.0) - 16.0;
-            let py = (world.player_y.raw() as f32 / 16.0) - 16.0;
-            push_texture_quad(&mut all_sprite_vertices, px, py, 32.0, 32.0);
+            let visual = player_growth_data(world.growth_level);
+            let width = visual.visual_width as f32;
+            let height = visual.visual_height as f32;
+            let px = world.player_x.raw() as f32 / 16.0 - width / 2.0;
+            let py = world.player_y.raw() as f32 / 16.0 - height / 2.0;
+            push_texture_quad(&mut all_sprite_vertices, px, py, width, height);
         }
         let player_end = all_sprite_vertices.len();
 
@@ -863,7 +907,7 @@ impl GpuRenderer {
             {
                 let count = background_vertices.len().min(MAX_BACKGROUND_VERTICES) as u32;
                 pass.set_pipeline(&self.texture_pipeline);
-                pass.set_bind_group(0, &self.background_bind_group, &[]);
+                pass.set_bind_group(0, &self.background_bind_groups[background_index], &[]);
                 pass.set_vertex_buffer(0, self.background_vertex_buffer.slice(..));
                 pass.draw(0..count, 0..1);
 
@@ -872,9 +916,15 @@ impl GpuRenderer {
                     pass.set_pipeline(&self.texture_pipeline);
                     pass.set_vertex_buffer(0, self.sprite_vertex_buffer.slice(..));
 
-                    if enemy_start < enemy_end {
-                        pass.set_bind_group(0, &self.enemy_bind_groups[anim_frame], &[]);
-                        pass.draw(enemy_start as u32..enemy_end as u32, 0..1);
+                    for (variant, &(start, end)) in enemy_ranges.iter().enumerate() {
+                        if start < end {
+                            pass.set_bind_group(
+                                0,
+                                &self.enemy_bind_groups[stage_index][variant][anim_frame],
+                                &[],
+                            );
+                            pass.draw(start as u32..end as u32, 0..1);
+                        }
                     }
                     if boss_start < boss_end {
                         pass.set_bind_group(0, &self.boss_bind_groups[boss_anim], &[]);
@@ -884,24 +934,33 @@ impl GpuRenderer {
                         pass.set_bind_group(0, &self.item_bind_groups[anim_frame], &[]);
                         pass.draw(item_start as u32..item_end as u32, 0..1);
                     }
-                    if bullet_p_start < bullet_p_end {
-                        pass.set_bind_group(0, &self.bullet_player_bind_group, &[]);
-                        pass.draw(bullet_p_start as u32..bullet_p_end as u32, 0..1);
+                    for (variant, &(start, end)) in player_bullet_ranges.iter().enumerate() {
+                        if start < end {
+                            pass.set_bind_group(
+                                0,
+                                &self.player_bullet_bind_groups[variant][player_anim],
+                                &[],
+                            );
+                            pass.draw(start as u32..end as u32, 0..1);
+                        }
                     }
-                    if bullet_pierce_start < bullet_pierce_end {
-                        pass.set_bind_group(0, &self.bullet_pierce_bind_group, &[]);
-                        pass.draw(bullet_pierce_start as u32..bullet_pierce_end as u32, 0..1);
-                    }
-                    if bullet_e0_start < bullet_e0_end {
-                        pass.set_bind_group(0, &self.enemy_bullet_bind_groups[0], &[]);
-                        pass.draw(bullet_e0_start as u32..bullet_e0_end as u32, 0..1);
-                    }
-                    if bullet_e1_start < bullet_e1_end {
-                        pass.set_bind_group(0, &self.enemy_bullet_bind_groups[1], &[]);
-                        pass.draw(bullet_e1_start as u32..bullet_e1_end as u32, 0..1);
+                    for (variant, &(start, end)) in enemy_bullet_ranges.iter().enumerate() {
+                        if start < end {
+                            pass.set_bind_group(
+                                0,
+                                &self.enemy_bullet_bind_groups[variant][anim_frame],
+                                &[],
+                            );
+                            pass.draw(start as u32..end as u32, 0..1);
+                        }
                     }
                     if player_start < player_end {
-                        pass.set_bind_group(0, &self.player_bind_groups[player_anim], &[]);
+                        let player_level = usize::from(world.growth_level.min(4));
+                        pass.set_bind_group(
+                            0,
+                            &self.player_bind_groups[player_level][player_anim],
+                            &[],
+                        );
                         pass.draw(player_start as u32..player_end as u32, 0..1);
                     }
                 }

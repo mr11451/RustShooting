@@ -121,7 +121,15 @@ CharacterTrait {
 - `default_orbit_id`: 初期軌道ID
 - `default_fire_pattern_id`: 発射パターンID
 
+敵やボスの画面上の表示サイズは`ENEMY_VISUAL_DATA`でIDごとに調整します。`width`と`height`は表示用ピクセルサイズで、当たり判定の`hitbox_width`/`hitbox_height`とは別です。
+
 実際の出現位置とタイミングは `STAGE_SCHEDULES` で管理します。ボスは各ステージの最後のスケジュール行を追加・変更します。
+
+ステージごとの仮戦闘セットは`STAGE_COMBAT_DATA`で管理します。通常敵、ボス、通常敵の発射パターン、ボスの発射パターン、敵弾特性IDをステージ単位で変更できます。スケジュールは出現位置とタイミングを担当し、キャラクター種別と発射設定はこのテーブルから解決されます。
+
+敵画像のファイル名は`STAGE_ENEMY_IMAGE_DATA`で`stage_id`と敵`character_id`の組み合わせごとに管理します。共通ディレクトリは`STAGE_ENEMY_IMAGE_DIRECTORY`です。ステージごとに行を追加・削除すれば、使用する敵種類と画像ファイルを変更できます。
+
+敵弾は`ENEMY_BULLET_PROFILE_DATA`で発射元の敵IDから弾特性IDへ変換します。敵弾画像は`enemy_bullet_06.gif`〜`enemy_bullet_16.gif`へ弾IDごとに分離されています。
 
 ### 軌道
 
@@ -129,7 +137,22 @@ CharacterTrait {
 
 - `Straight`: `velocity_x` / `velocity_y` による直線移動
 - `Bezier`: `control_point_1`、`control_point_2`、`control_point_end`による曲線移動
-- `Circle`: `radius` と `speed`から円運動。`next_orbit_id`を自分自身にすると無限ループ
+各ステージの背景は`stage01`から`stage06`まで個別に読み込まれます。`World.stage_id`が変わるとRendererが対応するアトラスとタイルマップを選択します。背景速度はQ12.4で管理し、ステージスケジュールの`background_speed`で変更できます。
+
+### ステージ別BGM
+
+`RodioAudio::play_stage_bgm(stage_id)`が次のファイルを自動選択します。
+
+```text
+assets/audio/stage01_bgm.wav
+assets/audio/stage02_bgm.wav
+assets/audio/stage03_bgm.wav
+assets/audio/stage04_bgm.wav
+assets/audio/stage05_bgm.wav
+assets/audio/stage06_bgm.wav
+```
+
+ファイルがない場合はステージ1のBGMへフォールバックします。ステージごとに音楽を変える場合は、同じファイル名を維持してWAVを差し替えてください。
 - `MoveToPosition`: `target_position`へ移動
 - `next_orbit_id`: 軌道終了後に移る軌道。`0`は終了、別IDは任意の軌道へ遷移
 
@@ -188,7 +211,7 @@ CharacterTrait {
 
 - キャラクター・ボス・アイテム: 32x32タイルのGIF
 - ボス画像: 64x64タイルを使用する実装箇所あり
-- 敵弾: `enemy_bullets.gif` の8x8タイル2パターン
+- 敵弾: `enemy_bullet_06.gif`〜`enemy_bullet_16.gif` の8x8タイル2フレーム
 - 背景: 64x64 RGBA PNG
 - 音声: WAV
 

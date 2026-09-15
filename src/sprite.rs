@@ -164,12 +164,12 @@ mod tests {
 
     #[test]
     fn loads_placeholder_player_sprite_sheet() {
-        let sheet = SpriteSheet::from_gif_path("assets/characters/player.gif", 32, 32)
-            .expect("placeholder player GIF should load");
+        let sheet = SpriteSheet::from_gif_path("assets/characters/player_level_00.gif", 32, 32)
+            .expect("placeholder player level GIF should load");
 
         assert_eq!(sheet.columns, 2);
         assert_eq!(sheet.rows, 1);
-        assert_eq!(sheet.animation_count(), 1);
+        assert_eq!(sheet.animation_count(), 2);
         assert_eq!(
             sheet.frame(0, 0).map(|frame| frame.rgba8.len()),
             Some(32 * 32 * 4)
@@ -188,8 +188,8 @@ mod tests {
 
     #[test]
     fn loads_placeholder_enemy_bullet_sprite_sheet() {
-        let sheet = SpriteSheet::from_gif_path("assets/bullets/enemy_bullets.gif", 8, 8)
-            .expect("placeholder enemy bullet GIF should load");
+        let sheet = SpriteSheet::from_gif_path("assets/bullets/enemy_bullet_06.gif", 8, 8)
+            .expect("placeholder enemy bullet variant GIF should load");
 
         assert_eq!(sheet.columns, 2);
         assert_eq!(sheet.rows, 1);

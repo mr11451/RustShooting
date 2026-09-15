@@ -12,6 +12,8 @@ pub use world::World;
 
 use crate::input::InputState;
 
+const RESPAWN_DELAY_FRAMES: u32 = 600;
+
 pub fn update(world: &mut World, input: InputState) {
     if input.quit {
         world.reset_stage();
@@ -48,6 +50,10 @@ pub fn update(world: &mut World, input: InputState) {
                 world.advance_to_next_stage();
                 world.state = GameState::StageIntro;
             }
+        }
+        GameState::Respawn if world.frame.saturating_add(1) >= RESPAWN_DELAY_FRAMES => {
+            world.reset_stage();
+            world.state = GameState::StageIntro;
         }
         GameState::GameOver if world.frame.saturating_add(1) >= 900 => {
             world.reset_stage();
@@ -538,6 +544,32 @@ mod tests {
     }
 
     #[test]
+    fn homing_enemy_bullet_steers_toward_player() {
+        let mut world = World {
+            state: GameState::Playing,
+            player_x: crate::fixed::Q12_4(2_000),
+            player_y: crate::fixed::Q12_4(2_000),
+            ..World::default()
+        };
+        world.enemy_bullets.spawn(crate::runtime::ObjectState {
+            character_id: 16,
+            x: crate::fixed::Q12_4(1_000),
+            y: crate::fixed::Q12_4(2_000),
+            velocity_y: crate::fixed::Q12_4(30),
+            ..Default::default()
+        });
+
+        world.update_projectiles(false, false);
+
+        let bullet = world
+            .enemy_bullets
+            .first_active()
+            .expect("homing bullet should remain active");
+        assert!(bullet.velocity_x.raw() > 0);
+        assert!(bullet.velocity_y.raw().abs() < 30);
+    }
+
+    #[test]
     fn recovery_stock_restores_25_hp_after_damage() {
         let mut world = World {
             state: GameState::Playing,
@@ -659,8 +691,12 @@ mod tests {
         });
         world.resolve_player_hits();
         assert_eq!(world.lives, 2);
-        assert_eq!(world.state, GameState::StageIntro);
+        assert_eq!(world.state, GameState::Respawn);
         assert_eq!(world.frame, 0);
+        for _ in 0..600 {
+            update(&mut world, InputState::default());
+        }
+        assert_eq!(world.state, GameState::StageIntro);
         assert_eq!(world.hp, 100);
         assert_eq!(world.player_x, crate::data::PLAYER_INITIAL_X_Q12);
         assert_eq!(world.player_y, crate::data::PLAYER_INITIAL_Y_Q12);

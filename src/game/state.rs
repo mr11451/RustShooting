@@ -6,6 +6,7 @@ pub enum GameState {
     StageIntro,
     Playing,
     StageClear,
+    Respawn,
     GameOver,
     NameEntry,
     Ending,

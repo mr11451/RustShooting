@@ -3,8 +3,9 @@ use crate::{
     collision::{Hitbox, overlaps},
     data::{
         CharacterType, ORBIT_DATA, ObjectType, OrbitType, PLAYER_INITIAL_X_Q12,
-        PLAYER_INITIAL_Y_Q12, SCREEN_HEIGHT_Q12, SCREEN_WIDTH_Q12, ScheduleData, bullet_character,
-        character_trait, direction_velocity, fire_pattern, player_growth_data, stage_schedule,
+        PLAYER_INITIAL_Y_Q12, SCREEN_HEIGHT_Q12, SCREEN_WIDTH_Q12, ScheduleData,
+        additional_fire_pattern_ids, bullet_character, character_trait, direction_velocity,
+        fire_pattern, player_growth_data, stage_schedule,
     },
     runtime::{
         ENEMY_BULLET_CAPACITY, ENEMY_CAPACITY, EffectPool, EffectState, ITEM_CAPACITY, ObjectPool,
@@ -290,17 +291,74 @@ impl World {
         let pending: Vec<crate::runtime::ObjectState> = {
             let mut bullets = Vec::new();
             self.enemies.for_each_active_mut(|enemy| {
-                if let Some(pattern) = fire_pattern(enemy.fire_pattern_id)
-                    && enemy.orbit_frame == pattern.fire_frame
-                {
+                let pattern_ids = std::iter::once(enemy.fire_pattern_id).chain(
+                    additional_fire_pattern_ids(enemy.character_id)
+                        .iter()
+                        .copied(),
+                );
+                for pattern_id in pattern_ids {
+                    let Some(pattern) = fire_pattern(pattern_id) else {
+                        continue;
+                    };
+                    if enemy.orbit_frame < pattern.fire_frame {
+                        continue;
+                    }
+                    let elapsed = enemy.orbit_frame - pattern.fire_frame;
+                    let phase = if pattern.repeat_interval_frames > 0 {
+                        elapsed % pattern.repeat_interval_frames
+                    } else {
+                        elapsed
+                    };
+                    let volley_index =
+                        if pattern.volley_count > 1 && pattern.volley_interval_frames > 0 {
+                            if !phase.is_multiple_of(pattern.volley_interval_frames) {
+                                continue;
+                            }
+                            let index = phase / pattern.volley_interval_frames;
+                            if index >= u32::from(pattern.volley_count) {
+                                continue;
+                            }
+                            index as u8
+                        } else {
+                            if phase != 0 {
+                                continue;
+                            }
+                            0
+                        };
+                    let spawn_x = enemy.x + pattern.spawn_offset_x;
+                    let spawn_y = enemy.y + pattern.spawn_offset_y;
+                    let (velocity_x, velocity_y) = if pattern.angle_mode
+                        == crate::data::FireAngleMode::AimAtPlayer
+                    {
+                        let delta_x = f32::from(self.player_x.raw() - spawn_x.raw());
+                        let delta_y = f32::from(self.player_y.raw() - spawn_y.raw());
+                        let distance = (delta_x * delta_x + delta_y * delta_y).sqrt();
+                        if distance > 0.0 {
+                            let speed = f32::from(pattern.speed.raw());
+                            (
+                                crate::fixed::Q12_4((delta_x / distance * speed).round() as i16),
+                                crate::fixed::Q12_4((delta_y / distance * speed).round() as i16),
+                            )
+                        } else {
+                            pattern.velocity()
+                        }
+                    } else if pattern.volley_count > 1 {
+                        let base = i16::from(crate::data::direction_index(pattern.direction));
+                        let offset = i16::from(volley_index) * i16::from(pattern.direction_step);
+                        let direction =
+                            crate::data::direction_from_index((base + offset).rem_euclid(32) as u8);
+                        crate::data::direction_velocity(direction, pattern.speed)
+                    } else {
+                        pattern.velocity()
+                    };
                     bullets.push(crate::runtime::ObjectState {
                         character_id: character_trait(enemy.character_id)
                             .map(|data| data.bullet_character_id)
                             .unwrap_or(6),
-                        x: enemy.x + pattern.spawn_offset_x,
-                        y: enemy.y + pattern.spawn_offset_y,
-                        velocity_x: pattern.velocity().0,
-                        velocity_y: pattern.velocity().1,
+                        x: spawn_x,
+                        y: spawn_y,
+                        velocity_x,
+                        velocity_y,
                         ..Default::default()
                     });
                 }
@@ -338,6 +396,21 @@ impl World {
             }
         });
         self.enemy_bullets.for_each_active_mut(|bullet| {
+            if bullet_character(bullet.character_id).is_some_and(|data| data.homing) {
+                let delta_x = f32::from(self.player_x.raw() - bullet.x.raw());
+                let delta_y = f32::from(self.player_y.raw() - bullet.y.raw());
+                let distance = (delta_x * delta_x + delta_y * delta_y).sqrt();
+                let speed = ((i32::from(bullet.velocity_x.raw()).pow(2)
+                    + i32::from(bullet.velocity_y.raw()).pow(2))
+                    as f32)
+                    .sqrt();
+                if distance > 0.0 && speed > 0.0 {
+                    bullet.velocity_x =
+                        crate::fixed::Q12_4((delta_x / distance * speed).round() as i16);
+                    bullet.velocity_y =
+                        crate::fixed::Q12_4((delta_y / distance * speed).round() as i16);
+                }
+            }
             bullet.x += bullet.velocity_x;
             bullet.y += bullet.velocity_y;
             if bullet.y.raw() < -512
@@ -647,8 +720,8 @@ impl World {
                         self.state = GameState::GameOver;
                     }
                 } else {
-                    self.reset_stage();
-                    self.state = GameState::StageIntro;
+                    self.frame = 0;
+                    self.state = GameState::Respawn;
                 }
             }
         }

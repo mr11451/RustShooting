@@ -902,6 +902,7 @@ impl GpuRenderer {
                 GameState::Playing
                     | GameState::StageIntro
                     | GameState::StageClear
+                    | GameState::Respawn
                     | GameState::GameOver
             ) && !background_vertices.is_empty()
             {
@@ -1247,7 +1248,7 @@ pub fn build_world_vertices(world: &World, vertices: &mut Vec<Vertex>) {
             let score_text = format!("FINAL SCORE: {:08}", world.score);
             push_text_centered_x(vertices, base_y + 110.0, &score_text, [1.0, 1.0, 1.0], 1.6);
         }
-        GameState::Playing | GameState::StageIntro | GameState::StageClear => {
+        GameState::Playing | GameState::StageIntro | GameState::StageClear | GameState::Respawn => {
             // Destruction and growth effects (rendered with solid vertices)
             world.effects.for_each_active(|effect| {
                 let x = effect.x.raw() as f32 / 16.0;

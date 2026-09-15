@@ -24,38 +24,54 @@
   - 画面高 (`SCREEN_HEIGHT_Q12`): `640 * 16 = 10,240`
   - 自機初期位置: `(PLAYER_INITIAL_X_Q12, PLAYER_INITIAL_Y_Q12) = (3840, 8960)` （実座標 `(240.0, 560.0)`）
   - 自弾速度: 成長特性テーブルでQ12.4値を管理。現行値は `64 / 67 / 70 / 74 / 77`
-  - 敵弾速度: 発射パターンのQ12.4速度成分を生成時に `5/4` 倍して適用。
+  - 敵弾速度: 発射パターンデータ自体に1.25倍済みのQ12.4速度を設定。
 
 ### 1.3 32方向（`Direction32`）
 自弾・敵弾・敵移動の向きは32等分（1方位あたり11.25°）で管理されます。既存の`Direction16`参照名は互換エイリアスとして残しています。
 
-| インデックス | 方向名 | 角度 (時計回り, 0=上) | X成分 (速度比) | Y成分 (速度比) |
+| インデックス | 方向名 | 角度 (時計回り, 0=上) |
 |---|---|---|---|---|
-| 0 | North | 0.0° | 0 | -1.0 |
-| 1 | NorthNorthEast | 22.5° | +0.38 | -0.92 |
-| 2 | NorthEast | 45.0° | +0.71 | -0.71 |
-| 3 | EastNorthEast | 67.5° | +0.92 | -0.38 |
-| 4 | East | 90.0° | +1.0 | 0 |
-| 5 | EastSouthEast | 112.5° | +0.92 | +0.38 |
-| 6 | SouthEast | 135.0° | +0.71 | +0.71 |
-| 7 | SouthSouthEast | 157.5° | +0.38 | +0.92 |
-| 8 | South | 180.0° | 0 | +1.0 |
-| 9 | SouthSouthWest | 202.5° | -0.38 | +0.92 |
-| 10 | SouthWest | 225.0° | -0.71 | +0.71 |
-| 11 | WestSouthWest | 247.5° | -0.92 | +0.38 |
-| 12 | West | 270.0° | -1.0 | 0 |
-| 13 | WestNorthWest | 292.5° | -0.92 | -0.38 |
-| 14 | NorthWest | 315.0° | -0.71 | -0.71 |
-| 15 | NorthNorthWest | 337.5° | -0.38 | -0.92 |
+| 0 | North | 0.0° |
+| 1 | NorthByEast | 11.25° |
+| 2 | NorthNorthEast | 22.5° |
+| 3 | NorthEastByNorth | 33.75° |
+| 4 | NorthEast | 45.0° |
+| 5 | NorthEastByEast | 56.25° |
+| 6 | EastNorthEast | 67.5° |
+| 7 | EastByNorth | 78.75° |
+| 8 | East | 90.0° |
+| 9 | EastBySouth | 101.25° |
+| 10 | EastSouthEast | 112.5° |
+| 11 | SouthEastByEast | 123.75° |
+| 12 | SouthEast | 135.0° |
+| 13 | SouthEastBySouth | 146.25° |
+| 14 | SouthSouthEast | 157.5° |
+| 15 | SouthByEast | 168.75° |
+| 16 | South | 180.0° |
+| 17 | SouthByWest | 191.25° |
+| 18 | SouthSouthWest | 202.5° |
+| 19 | SouthWestBySouth | 213.75° |
+| 20 | SouthWest | 225.0° |
+| 21 | SouthWestByWest | 236.25° |
+| 22 | WestSouthWest | 247.5° |
+| 23 | WestBySouth | 258.75° |
+| 24 | West | 270.0° |
+| 25 | WestByNorth | 281.25° |
+| 26 | WestNorthWest | 292.5° |
+| 27 | NorthWestByWest | 303.75° |
+| 28 | NorthWest | 315.0° |
+| 29 | NorthWestByNorth | 326.25° |
+| 30 | NorthNorthWest | 337.5° |
+| 31 | NorthByWest | 348.75° |
 
 ### 1.4 ボス円軌道
 
-ボス（キャラクターID `100..=105`）は、軌道フレームを16点の円周テーブルへ循環させて移動します。
+ボス（キャラクターID `100..=105`）は、軌道データの中心・半径・弧長速度から円軌道を計算します。
 
 - 円の中心: `(240, 220)` pixel
 - 円の半径: `96` pixel
-- 軌道: 16フレームで1周し、無限ループ
-- 座標: 円周上の絶対座標を毎フレーム設定するため、加算誤差でドリフトしない
+- 軌道: 半径と弧長速度から角速度を計算し、`next_orbit_id`で無限ループ
+- 座標: 円の中心を保持して毎フレーム計算するため、加算誤差でドリフトしない
 - 境界: ボス画像と当たり判定が画面内に収まる余白を確保
 
 ---
@@ -163,7 +179,7 @@ pub struct FirePatternData {
     pub spawn_offset_x: Q12_4,   // 敵中心からの発射Xオフセット (Q12.4)
     pub spawn_offset_y: Q12_4,   // 敵中心からの発射Yオフセット (Q12.4)
     pub bullet_character_id: u16,// 発射する弾特性ID
-    pub direction: Direction16,  // 発射方向 (16方位)
+    pub direction: Direction16,  // 発射方向 (32方位。互換名)
     pub speed: Q12_4,            // 弾速 (Q12.4)
     pub bullet_velocity_x: Q12_4,// X方向初速
     pub bullet_velocity_y: Q12_4,// Y方向初速
@@ -177,7 +193,7 @@ pub struct FirePatternData {
 pub struct OrbitData {
     pub orbit_id: u16,                   // 軌道ID
     pub orbit_type: OrbitType,           // Straight, Circle, Bezier, MoveToPosition
-    pub direction: Direction16,          // 初期進行方向
+    pub direction: Direction16,          // 初期進行方向 (32方位。互換名)
     pub speed: Q12_4,                    // 進行速度
     pub radius: Q12_4,                   // 円軌道の回転半径
     pub control_point_1: (Q12_4, Q12_4), // 三次ベジェ曲線の相対制御点 P1

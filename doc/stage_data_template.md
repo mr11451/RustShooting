@@ -36,7 +36,7 @@ MVP では、この Markdown の内容を確認したうえで Rust の定数配
 - 敵は軌道データの適用中であれば画面外へ出ても削除しない
 - 敵の軌道データが終了した後は、敵の位置更新を背景スクロール量に同期し、画像矩形全体が画面外へ出た時点で削除する
 - 画面内の敵、弾、アイテムが固定長容量を超える場合は、暫定仕様では新規生成を破棄する
-- 方向は 16 方向で管理する
+- 方向は 32 方向で管理する
 - 速度と位置は符号付き `Q12.4` 固定小数点で管理する。符号付き 16 ビット値の下位 4 ビットを小数部とする
 - `Q12.4` の実値は格納値を 16 で割って求める。例: `80.0` は `1280`、`2.0` は `32`
 - 値は 2 の補数で表現し、負の速度や左・上方向の座標も扱える
@@ -238,7 +238,7 @@ CharacterTrait {
 |---|---|---|
 | `orbit_id` | `u16` | 軌道 ID。1 以上の通し番号 |
 | `orbit_type` | `enum` | `Straight`、`Circle`、`Bezier` など |
-| `direction` | `enum` | 16 方向。`North`、`NorthNorthEast`、`NorthEast`、`EastNorthEast`、`East`、`EastSouthEast`、`SouthEast`、`SouthSouthEast`、`South`、`SouthSouthWest`、`SouthWest`、`WestSouthWest`、`West`、`WestNorthWest`、`NorthWest`、`NorthNorthWest` |
+| `direction` | `enum` | 32方向。1方位11.25度。 |
 | `speed` | `i16` | 1 フレームあたりの移動量。`Q12.4` 固定小数点 |
 | `radius` | `i16` | 円軌道の半径。`Q12.4` 固定小数点。不要なら 0 |
 | `control_point_1` | `(i16, i16)` | ベジェ曲線の第 1 制御点。出現位置からの相対座標。`Q12.4` 固定小数点 |
@@ -258,7 +258,7 @@ CharacterTrait {
 Orbit {
     orbit_id: <ID>,
     orbit_type: <Straight|Circle|Bezier>,
-    direction: <16方向>,
+    direction: <32方向>,
     speed: <Q12.4単位速度>,
     radius: <Q12.4回転半径>,
     control_point_1: <Q12.4相対X, Q12.4相対Y>,
@@ -343,7 +343,7 @@ FirePattern {
     spawn_offset_x: <Q12.4相対X>,
     spawn_offset_y: <Q12.4相対Y>,
     direction_type: <Fixed16|ToPlayerAtFire|ToPlayerTracking>,
-    direction: <16方向または未設定>,
+    direction: <32方向または未設定>,
     bullet_character_id: <敵弾特性 ID>,
     bullet_count: <発射数>,
     interval_frames: <間隔または0>,
@@ -391,7 +391,7 @@ BulletCharacter {
     owner_type: <Player|Enemy>,
     shape_id: <形状 ID>,
     motion_type: <Straight|FixedDirection|Homing|Tracking>,
-    direction: <16方向または未設定>,
+    direction: <32方向または未設定>,
     speed: <Q12.4弾速>,
     acceleration: <Q12.4加速度>,
     damage: <ダメージ>,

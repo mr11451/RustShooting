@@ -190,8 +190,8 @@ pub struct PlayerGrowthData {
   pub speed: Q12_4,            // 自弾の速さ。方向変換前の正値
   pub visual_width: u16,       // 自機表示幅
   pub visual_height: u16,      // 自機表示高
-  pub hitbox_half_width: i16,  // 自機当たり判定の半幅
-  pub hitbox_half_height: i16, // 自機当たり判定の半高
+  pub hitbox_half_width: Q12_4,  // 自機当たり判定の半幅
+  pub hitbox_half_height: Q12_4, // 自機当たり判定の半高
   pub move_speed: Q12_4,       // 自機移動速度
   pub directions: &'static [Direction16], // グループ内各弾の射出方向
 }

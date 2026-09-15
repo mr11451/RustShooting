@@ -112,8 +112,8 @@ impl World {
         Hitbox {
             x: self.player_x,
             y: self.player_y,
-            half_width: crate::fixed::Q12_4(data.hitbox_half_width),
-            half_height: crate::fixed::Q12_4(data.hitbox_half_height),
+            half_width: data.hitbox_half_width,
+            half_height: data.hitbox_half_height,
         }
     }
 

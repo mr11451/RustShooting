@@ -83,8 +83,8 @@ pub struct PlayerGrowthData {
     pub speed: Q12_4,
     pub visual_width: u16,
     pub visual_height: u16,
-    pub hitbox_half_width: i16,
-    pub hitbox_half_height: i16,
+    pub hitbox_half_width: Q12_4,
+    pub hitbox_half_height: Q12_4,
     pub move_speed: Q12_4,
     pub directions: &'static [super::Direction16],
 }

@@ -91,6 +91,11 @@ pub fn update(world: &mut World, input: InputState) {
         world.update_projectiles(input.fire, input.fire_trigger);
         world.update_items();
         world.resolve_collisions();
+    } else if world.state == GameState::Respawn {
+        world.spawn_scheduled_objects();
+        world.update_enemy_movement();
+        world.update_background();
+        world.update_enemy_projectiles();
     }
 
     world.update_effects();

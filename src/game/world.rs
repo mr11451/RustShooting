@@ -384,17 +384,7 @@ impl World {
         );
     }
 
-    pub fn update_projectiles(&mut self, fire_held: bool, fire_trigger: bool) {
-        self.player_bullets.for_each_active_mut(|bullet| {
-            bullet.x += bullet.velocity_x;
-            bullet.y += bullet.velocity_y;
-            if bullet.y.raw() < -512
-                || bullet.x.raw() < -128
-                || bullet.x.raw() >= SCREEN_WIDTH_Q12.raw() + 128
-            {
-                bullet.active = false;
-            }
-        });
+    pub fn update_enemy_projectiles(&mut self) {
         self.enemy_bullets.for_each_active_mut(|bullet| {
             if bullet_character(bullet.character_id).is_some_and(|data| data.homing) {
                 let delta_x = f32::from(self.player_x.raw() - bullet.x.raw());
@@ -421,6 +411,20 @@ impl World {
                 bullet.active = false;
             }
         });
+    }
+
+    pub fn update_projectiles(&mut self, fire_held: bool, fire_trigger: bool) {
+        self.player_bullets.for_each_active_mut(|bullet| {
+            bullet.x += bullet.velocity_x;
+            bullet.y += bullet.velocity_y;
+            if bullet.y.raw() < -512
+                || bullet.x.raw() < -128
+                || bullet.x.raw() >= SCREEN_WIDTH_Q12.raw() + 128
+            {
+                bullet.active = false;
+            }
+        });
+        self.update_enemy_projectiles();
 
         if self.player_group_fire_cooldown > 0 {
             self.player_group_fire_cooldown -= 1;
@@ -712,6 +716,7 @@ impl World {
                 self.recovery_stock -= 1;
             }
             if self.hp == 0 {
+                self.player_bullets.clear();
                 self.lives = self.lives.saturating_sub(1);
                 if self.lives == 0 {
                     if self.ranking.is_high_score(self.score) {

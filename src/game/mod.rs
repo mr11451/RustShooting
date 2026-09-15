@@ -127,6 +127,33 @@ mod tests {
     }
 
     #[test]
+    fn boss_orbit_loops_inside_screen_bounds() {
+        let mut world = World {
+            state: GameState::Playing,
+            ..World::default()
+        };
+        world.enemies.spawn(crate::runtime::ObjectState {
+            character_id: 100,
+            orbit_id: 8,
+            hp: 1_000,
+            ..Default::default()
+        });
+
+        for _ in 0..128 {
+            world.update_enemy_movement();
+        }
+
+        let boss = world
+            .enemies
+            .first_active()
+            .expect("boss should remain active");
+        assert!(boss.x.raw() >= 96 * 16);
+        assert!(boss.x.raw() < crate::data::SCREEN_WIDTH_Q12.raw() - 96 * 16);
+        assert!(boss.y.raw() >= 64 * 16);
+        assert!(boss.y.raw() < crate::data::SCREEN_HEIGHT_Q12.raw() - 64 * 16);
+    }
+
+    #[test]
     fn enemy_fires_bullet_at_pattern_frame() {
         let mut world = World {
             state: GameState::Playing,
@@ -235,6 +262,25 @@ mod tests {
         assert_eq!(world.player_bullets.active_count(), 1);
         world.update_projectiles(true, false);
         assert_eq!(world.player_bullets.active_count(), 1);
+    }
+
+    #[test]
+    fn player_bullet_speed_increases_by_level() {
+        for (growth_level, expected_speed) in [(-64, 0), (-67, 1), (-70, 2), (-74, 3), (-77, 4)] {
+            let mut world = World {
+                state: GameState::Playing,
+                growth_level: expected_speed,
+                ..World::default()
+            };
+
+            world.update_projectiles(false, true);
+
+            let bullet = world
+                .player_bullets
+                .first_active()
+                .expect("bullet should be spawned");
+            assert_eq!(bullet.velocity_y.raw(), growth_level);
+        }
     }
 
     #[test]

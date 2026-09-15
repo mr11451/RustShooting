@@ -2,9 +2,9 @@ use crate::{
     audio::AudioEvent,
     collision::{Hitbox, overlaps},
     data::{
-        CharacterType, ORBIT_DATA, ObjectType, OrbitType, PLAYER_INITIAL_X_Q12,
-        PLAYER_INITIAL_Y_Q12, SCREEN_HEIGHT_Q12, SCREEN_WIDTH_Q12, ScheduleData, bullet_character,
-        character_trait, fire_pattern, stage_schedule,
+        CharacterType, ORBIT_DATA, ObjectType, OrbitType, PLAYER_BULLET_SPEED_BY_LEVEL_Q12,
+        PLAYER_INITIAL_X_Q12, PLAYER_INITIAL_Y_Q12, SCREEN_HEIGHT_Q12, SCREEN_WIDTH_Q12,
+        ScheduleData, bullet_character, character_trait, fire_pattern, stage_schedule,
     },
     runtime::{
         ENEMY_BULLET_CAPACITY, ENEMY_CAPACITY, EffectPool, EffectState, ITEM_CAPACITY, ObjectPool,
@@ -189,10 +189,36 @@ impl World {
                 .iter()
                 .find(|orbit| orbit.orbit_id == enemy.orbit_id);
             match orbit_opt {
-                Some(orbit)
-                    if orbit.orbit_type == OrbitType::Circle
-                        && enemy.orbit_frame <= orbit.duration_frames =>
-                {
+                Some(orbit) if enemy.orbit_frame > orbit.duration_frames => {
+                    if orbit.next_orbit_id != 0 {
+                        let preserve_origin = orbit.next_orbit_id == enemy.orbit_id;
+                        enemy.orbit_id = orbit.next_orbit_id;
+                        enemy.orbit_frame = 0;
+                        if !preserve_origin {
+                            enemy.orbit_origin_x = enemy.x;
+                            enemy.orbit_origin_y = enemy.y;
+                        }
+                        return;
+                    }
+                    enemy.y += self.background_speed;
+                    let (half_w, half_h) = character_trait(enemy.character_id)
+                        .map_or((256, 256), |t| (t.hitbox_width, t.hitbox_height));
+                    if enemy.x.raw() + half_w < 0
+                        || enemy.x.raw() - half_w >= SCREEN_WIDTH_Q12.raw()
+                        || enemy.y.raw() + half_h < 0
+                        || enemy.y.raw() - half_h >= SCREEN_HEIGHT_Q12.raw()
+                    {
+                        enemy.active = false;
+                    }
+                }
+                Some(orbit) if orbit.orbit_type == OrbitType::MoveToPosition => {
+                    let duration = orbit.duration_frames.max(1);
+                    let t =
+                        ((enemy.orbit_frame.min(duration) as i64) * 1_000 / duration as i64) as i32;
+                    enemy.x = lerp_component(enemy.orbit_origin_x, orbit.target_position.0, t);
+                    enemy.y = lerp_component(enemy.orbit_origin_y, orbit.target_position.1, t);
+                }
+                Some(orbit) if orbit.orbit_type == OrbitType::Circle => {
                     let points = [
                         (48, 0),
                         (44, 18),
@@ -212,13 +238,12 @@ impl World {
                         (44, -18),
                     ];
                     let (x, y) = points[(enemy.orbit_frame as usize) % points.len()];
-                    enemy.x += crate::fixed::Q12_4(x * 16);
-                    enemy.y += crate::fixed::Q12_4(y * 16);
+                    enemy.x = enemy.orbit_origin_x
+                        + crate::fixed::Q12_4((x * i32::from(orbit.radius.raw()) / 48) as i16);
+                    enemy.y = enemy.orbit_origin_y
+                        + crate::fixed::Q12_4((y * i32::from(orbit.radius.raw()) / 48) as i16);
                 }
-                Some(orbit)
-                    if orbit.orbit_type == OrbitType::Bezier
-                        && enemy.orbit_frame <= orbit.duration_frames =>
-                {
+                Some(orbit) if orbit.orbit_type == OrbitType::Bezier => {
                     let duration = orbit.duration_frames.max(1);
                     let t =
                         ((enemy.orbit_frame.min(duration) as i64) * 1_000 / duration as i64) as i32;
@@ -237,24 +262,9 @@ impl World {
                         t,
                     );
                 }
-                Some(orbit)
-                    if orbit.orbit_type == OrbitType::Straight
-                        && enemy.orbit_frame <= orbit.duration_frames =>
-                {
+                Some(orbit) if orbit.orbit_type == OrbitType::Straight => {
                     enemy.x += enemy.velocity_x;
                     enemy.y += enemy.velocity_y;
-                }
-                Some(orbit) if enemy.orbit_frame > orbit.duration_frames => {
-                    enemy.y += self.background_speed;
-                    let (half_w, half_h) = character_trait(enemy.character_id)
-                        .map_or((256, 256), |t| (t.hitbox_width, t.hitbox_height));
-                    if enemy.x.raw() + half_w < 0
-                        || enemy.x.raw() - half_w >= SCREEN_WIDTH_Q12.raw()
-                        || enemy.y.raw() + half_h < 0
-                        || enemy.y.raw() - half_h >= SCREEN_HEIGHT_Q12.raw()
-                    {
-                        enemy.active = false;
-                    }
                 }
                 _ => {
                     enemy.x += enemy.velocity_x;
@@ -347,6 +357,8 @@ impl World {
             let group_id = self.next_player_bullet_group_id;
             self.next_player_bullet_group_id =
                 self.next_player_bullet_group_id.wrapping_add(1).max(1);
+            let bullet_speed = PLAYER_BULLET_SPEED_BY_LEVEL_Q12
+                [usize::from(self.growth_level.min(4))];
             for index in 0..shot_count {
                 let offset_pixels = (index as i16 * 16) - ((shot_count - 1) as i16 * 8);
                 let _ = self.player_bullets.spawn(crate::runtime::ObjectState {
@@ -354,7 +366,7 @@ impl World {
                     group_id,
                     x: self.player_x + crate::fixed::Q12_4::from_int(offset_pixels),
                     y: self.player_y,
-                    velocity_y: crate::fixed::Q12_4(-32),
+                    velocity_y: bullet_speed,
                     ..Default::default()
                 });
             }
@@ -698,6 +710,17 @@ impl crate::data::FirePatternData {
             ),
         }
     }
+}
+
+fn lerp_component(
+    start: crate::fixed::Q12_4,
+    end: crate::fixed::Q12_4,
+    t: i32,
+) -> crate::fixed::Q12_4 {
+    let t = i64::from(t.clamp(0, 1_000));
+    let value =
+        i64::from(start.raw()) + (i64::from(end.raw()) - i64::from(start.raw())) * t / 1_000;
+    crate::fixed::Q12_4(value.clamp(i64::from(i16::MIN), i64::from(i16::MAX)) as i16)
 }
 
 fn bezier_component(

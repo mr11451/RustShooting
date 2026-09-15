@@ -23,6 +23,7 @@
   - 画面幅 (`SCREEN_WIDTH_Q12`): `480 * 16 = 7,680`
   - 画面高 (`SCREEN_HEIGHT_Q12`): `640 * 16 = 10,240`
   - 自機初期位置: `(PLAYER_INITIAL_X_Q12, PLAYER_INITIAL_Y_Q12) = (3840, 8960)` （実座標 `(240.0, 560.0)`）
+  - 自弾速度: レベル0から `4.0 / 4.2 / 4.4 / 4.6 / 4.8 px/frame`（基準速度を2倍、以降レベルごとに `0.2 px/frame` 加速）
 
 ### 1.3 16方向（`Direction16`）
 敵弾や敵移動の向きは 16 等分（1方位あたり 22.5°）で管理されます。
@@ -45,6 +46,16 @@
 | 13 | WestNorthWest | 292.5° | -0.92 | -0.38 |
 | 14 | NorthWest | 315.0° | -0.71 | -0.71 |
 | 15 | NorthNorthWest | 337.5° | -0.38 | -0.92 |
+
+### 1.4 ボス円軌道
+
+ボス（キャラクターID `100..=105`）は、軌道フレームを16点の円周テーブルへ循環させて移動します。
+
+- 円の中心: `(240, 220)` pixel
+- 円の半径: `96` pixel
+- 軌道: 16フレームで1周し、無限ループ
+- 座標: 円周上の絶対座標を毎フレーム設定するため、加算誤差でドリフトしない
+- 境界: ボス画像と当たり判定が画面内に収まる余白を確保
 
 ---
 
@@ -147,21 +158,24 @@ pub struct FirePatternData {
 ```rust
 pub struct OrbitData {
     pub orbit_id: u16,                   // 軌道ID
-    pub orbit_type: OrbitType,           // Straight(直線), Circle(円), Bezier(三次ベジェ)
+    pub orbit_type: OrbitType,           // Straight, Circle, Bezier, MoveToPosition
     pub direction: Direction16,          // 初期進行方向
     pub speed: Q12_4,                    // 進行速度
     pub radius: Q12_4,                   // 円軌道の回転半径
     pub control_point_1: (Q12_4, Q12_4), // 三次ベジェ曲線の相対制御点 P1
     pub control_point_2: (Q12_4, Q12_4), // 三次ベジェ曲線の相対制御点 P2
     pub control_point_end: (Q12_4, Q12_4),// 三次ベジェ曲線の相対終点 P3
+    pub target_position: (Q12_4, Q12_4),  // MoveToPositionの目標座標
     pub start_angle: Option<u16>,        // 円軌道開始角度
     pub end_angle: Option<u16>,          // 円軌道終了角度
     pub duration_frames: u32,            // 軌道持続フレーム数
     pub acceleration: Q12_4,             // 加速度
-    pub next_orbit_id: u16,              // 連続する次の軌道ID (0=終了)
+    pub next_orbit_id: u16,              // 完了後に移る任意の軌道ID (0=終了、自己指定で無限ループ)
     pub rotation: i8,                    // 回転方向 (+1: 時計回り, -1: 反時計回り)
 }
 ```
+
+ボスの仮シーケンスは、軌道 `8`（画面内の定位置へ90フレームで移動）から軌道 `9`（半径96ピクセルの円、60フレームで1周）へ遷移します。軌道 `9`の`next_orbit_id`は`9`自身を指し、円の中心を保持したまま低速で無限ループします。別の軌道IDを指定すれば、シーケンスの任意位置へ遷移できます。
 
 ---
 

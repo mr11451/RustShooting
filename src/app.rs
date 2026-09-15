@@ -1,3 +1,4 @@
+use gilrs::{Axis, Button, EventType, Gilrs};
 use std::{
     sync::Arc,
     time::{Duration, Instant},
@@ -5,6 +6,7 @@ use std::{
 
 use crate::{
     audio::{RodioAudio, SoundCatalog},
+    data::{LOGICAL_HEIGHT, LOGICAL_WIDTH},
     game,
     input::{InputState, MoveAxis},
     render::GpuRenderer,
@@ -25,6 +27,8 @@ pub struct App {
     input: InputState,
     next_frame: Option<Instant>,
     audio: Option<RodioAudio>,
+    gilrs: Option<Gilrs>,
+    paused: bool,
 }
 
 impl ApplicationHandler for App {
@@ -37,7 +41,10 @@ impl ApplicationHandler for App {
                 .create_window(
                     WindowAttributes::default()
                         .with_title("Rust Shooting")
-                        .with_min_inner_size(winit::dpi::LogicalSize::new(640.0, 320.0)),
+                        .with_min_inner_size(winit::dpi::LogicalSize::new(
+                            LOGICAL_WIDTH,
+                            LOGICAL_HEIGHT,
+                        )),
                 )
                 .unwrap_or_else(|error| {
                     eprintln!("failed to create window: {error}");
@@ -62,6 +69,7 @@ impl ApplicationHandler for App {
             "assets/audio/damage.wav",
         ]);
         self.audio = RodioAudio::new(sounds).ok();
+        self.gilrs = Gilrs::new().ok();
     }
 
     fn window_event(
@@ -78,13 +86,16 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                self.handle_key(event.state, event.physical_key)
+                self.handle_key(event.state, event.physical_key, event.repeat)
             }
             WindowEvent::RedrawRequested => {
                 let now = Instant::now();
                 if self.next_frame.is_none_or(|deadline| now >= deadline) {
+                    self.poll_gamepad();
                     let prev_state = self.world.state;
-                    game::update(&mut self.world, self.input);
+                    if !self.paused {
+                        game::update(&mut self.world, self.input);
+                    }
                     if let Some(audio) = &mut self.audio {
                         if matches!(
                             self.world.state,
@@ -111,6 +122,7 @@ impl ApplicationHandler for App {
                         self.world.drain_audio_events();
                     }
                     self.input.start = false;
+                    self.input.fire_trigger = false;
                     self.input.quit = false;
                     self.next_frame = Some(now + frame_duration());
                 }
@@ -147,25 +159,29 @@ impl ApplicationHandler for App {
 }
 
 impl App {
-    fn handle_key(&mut self, state: ElementState, key: PhysicalKey) {
+    fn handle_key(&mut self, state: ElementState, key: PhysicalKey, repeat: bool) {
         let is_pressed = state == ElementState::Pressed;
         match key {
             PhysicalKey::Code(KeyCode::Space) | PhysicalKey::Code(KeyCode::KeyZ) => {
-                self.input.fire = is_pressed;
-                if is_pressed {
+                self.input
+                    .set_keyboard_fire(is_pressed, is_pressed && !repeat);
+                if is_pressed && !repeat {
                     self.input.start = true;
                 }
             }
             PhysicalKey::Code(KeyCode::Enter) | PhysicalKey::Code(KeyCode::KeyX) => {
-                if is_pressed {
+                if is_pressed && !repeat {
+                    self.input.set_keyboard_fire(true, true);
                     self.input.start = true;
-                    self.input.fire = true;
                 } else {
-                    self.input.fire = false;
+                    self.input.set_keyboard_fire(false, false);
                 }
             }
             PhysicalKey::Code(KeyCode::Escape) if is_pressed => {
                 self.input.quit = true;
+            }
+            PhysicalKey::Code(KeyCode::KeyP) if is_pressed && !repeat => {
+                self.toggle_pause();
             }
             PhysicalKey::Code(KeyCode::ArrowLeft) | PhysicalKey::Code(KeyCode::KeyA) => {
                 self.input.set_move_key(MoveAxis::Left, is_pressed);
@@ -182,8 +198,77 @@ impl App {
             _ => {}
         }
     }
+
+    fn poll_gamepad(&mut self) {
+        let Some(gilrs) = self.gilrs.as_mut() else {
+            return;
+        };
+        let mut toggle_pause_requested = false;
+        while let Some(event) = gilrs.next_event() {
+            match event.event {
+                EventType::ButtonPressed(Button::South, _) => {
+                    self.input.set_controller_fire(true, true);
+                    self.input.start = true;
+                }
+                EventType::ButtonReleased(Button::South, _) => {
+                    self.input.set_controller_fire(false, false);
+                }
+                EventType::ButtonPressed(Button::Start, _) => {
+                    toggle_pause_requested = true;
+                }
+                EventType::ButtonPressed(Button::DPadLeft, _) => {
+                    self.input.set_controller_move_key(MoveAxis::Left, true);
+                }
+                EventType::ButtonReleased(Button::DPadLeft, _) => {
+                    self.input.set_controller_move_key(MoveAxis::Left, false);
+                }
+                EventType::ButtonPressed(Button::DPadRight, _) => {
+                    self.input.set_controller_move_key(MoveAxis::Right, true);
+                }
+                EventType::ButtonReleased(Button::DPadRight, _) => {
+                    self.input.set_controller_move_key(MoveAxis::Right, false);
+                }
+                EventType::ButtonPressed(Button::DPadUp, _) => {
+                    self.input.set_controller_move_key(MoveAxis::Up, true);
+                }
+                EventType::ButtonReleased(Button::DPadUp, _) => {
+                    self.input.set_controller_move_key(MoveAxis::Up, false);
+                }
+                EventType::ButtonPressed(Button::DPadDown, _) => {
+                    self.input.set_controller_move_key(MoveAxis::Down, true);
+                }
+                EventType::ButtonReleased(Button::DPadDown, _) => {
+                    self.input.set_controller_move_key(MoveAxis::Down, false);
+                }
+                EventType::AxisChanged(Axis::LeftStickX, value, _) => {
+                    self.input.set_controller_axis(MoveAxis::Right, value);
+                    self.input.set_controller_axis(MoveAxis::Left, -value);
+                }
+                EventType::AxisChanged(Axis::LeftStickY, value, _) => {
+                    self.input.set_controller_axis(MoveAxis::Down, value);
+                    self.input.set_controller_axis(MoveAxis::Up, -value);
+                }
+                _ => {}
+            }
+        }
+        if toggle_pause_requested {
+            if self.world.state == game::GameState::Playing {
+                self.toggle_pause();
+            } else {
+                self.input.start = true;
+            }
+        }
+    }
+
+    fn toggle_pause(&mut self) {
+        if self.world.state == game::GameState::Playing {
+            self.paused = !self.paused;
+        }
+    }
 }
 
+const TARGET_FPS: u64 = 60;
+
 const fn frame_duration() -> Duration {
-    Duration::from_nanos(33_333_333)
+    Duration::from_nanos(1_000_000_000 / TARGET_FPS)
 }

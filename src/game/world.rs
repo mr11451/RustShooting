@@ -2,7 +2,8 @@ use crate::{
     audio::AudioEvent,
     collision::{Hitbox, overlaps},
     data::{
-        CharacterType, ORBIT_DATA, ObjectType, OrbitType, ScheduleData, bullet_character,
+        CharacterType, ORBIT_DATA, ObjectType, OrbitType, PLAYER_INITIAL_X_Q12,
+        PLAYER_INITIAL_Y_Q12, SCREEN_HEIGHT_Q12, SCREEN_WIDTH_Q12, ScheduleData, bullet_character,
         character_trait, fire_pattern, stage_schedule,
     },
     runtime::{
@@ -15,6 +16,7 @@ use super::state::GameState;
 
 const PLAYER_MAX_HP: u16 = 100;
 const RECOVERY_PER_STOCK: u16 = 25;
+const PLAYER_GROUP_FIRE_INTERVAL_FRAMES: u16 = 30;
 
 #[derive(Clone, Copy)]
 struct CollisionSnapshot {
@@ -37,7 +39,8 @@ pub struct World {
     pub enemy_bullets: ObjectPool<ENEMY_BULLET_CAPACITY>,
     pub items: ObjectPool<ITEM_CAPACITY>,
     pub effects: EffectPool,
-    pub shot_cooldown: u8,
+    pub next_player_bullet_group_id: u32,
+    pub player_group_fire_cooldown: u16,
     pub audio_events: Vec<AudioEvent>,
     pub background_scroll: crate::fixed::Q12_4,
     pub background_speed: crate::fixed::Q12_4,
@@ -64,12 +67,13 @@ impl Default for World {
             enemy_bullets: ObjectPool::default(),
             items: ObjectPool::default(),
             effects: EffectPool::default(),
-            shot_cooldown: 0,
+            next_player_bullet_group_id: 1,
+            player_group_fire_cooldown: 0,
             audio_events: Vec::new(),
             background_scroll: crate::fixed::Q12_4::ZERO,
             background_speed: crate::fixed::Q12_4(16),
-            player_x: crate::fixed::Q12_4(5_120),
-            player_y: crate::fixed::Q12_4(4_480),
+            player_x: PLAYER_INITIAL_X_Q12,
+            player_y: PLAYER_INITIAL_Y_Q12,
             growth_level: 0,
             recovery_stock: 0,
             invincible_frames: 0,
@@ -114,6 +118,23 @@ impl World {
         })
     }
 
+    fn active_player_bullet_group_count(&self) -> usize {
+        let mut group_ids = Vec::new();
+        self.player_bullets.for_each_active(|bullet| {
+            if !group_ids.contains(&bullet.group_id) {
+                group_ids.push(bullet.group_id);
+            }
+        });
+        group_ids.len()
+    }
+
+    fn recover_hp(&mut self) {
+        self.hp = self
+            .hp
+            .saturating_add(RECOVERY_PER_STOCK)
+            .min(PLAYER_MAX_HP);
+    }
+
     pub fn reset_stage(&mut self) {
         self.frame = 0;
         self.hp = PLAYER_MAX_HP;
@@ -122,11 +143,12 @@ impl World {
         self.enemy_bullets.clear();
         self.items.clear();
         self.effects.clear();
-        self.shot_cooldown = 0;
+        self.next_player_bullet_group_id = 1;
+        self.player_group_fire_cooldown = 0;
         self.audio_events.clear();
         self.background_scroll = crate::fixed::Q12_4::ZERO;
-        self.player_x = crate::fixed::Q12_4(5_120);
-        self.player_y = crate::fixed::Q12_4(4_480);
+        self.player_x = PLAYER_INITIAL_X_Q12;
+        self.player_y = PLAYER_INITIAL_Y_Q12;
         self.growth_level = 0;
         self.invincible_frames = 0;
     }
@@ -139,11 +161,12 @@ impl World {
         self.enemy_bullets.clear();
         self.items.clear();
         self.effects.clear();
-        self.shot_cooldown = 0;
+        self.next_player_bullet_group_id = 1;
+        self.player_group_fire_cooldown = 0;
         self.audio_events.clear();
         self.background_scroll = crate::fixed::Q12_4::ZERO;
-        self.player_x = crate::fixed::Q12_4(5_120);
-        self.player_y = crate::fixed::Q12_4(4_480);
+        self.player_x = PLAYER_INITIAL_X_Q12;
+        self.player_y = PLAYER_INITIAL_Y_Q12;
         self.invincible_frames = 0;
     }
 
@@ -226,9 +249,9 @@ impl World {
                     let (half_w, half_h) = character_trait(enemy.character_id)
                         .map_or((256, 256), |t| (t.hitbox_width, t.hitbox_height));
                     if enemy.x.raw() + half_w < 0
-                        || enemy.x.raw() - half_w >= 10_240
+                        || enemy.x.raw() - half_w >= SCREEN_WIDTH_Q12.raw()
                         || enemy.y.raw() + half_h < 0
-                        || enemy.y.raw() - half_h >= 5_120
+                        || enemy.y.raw() - half_h >= SCREEN_HEIGHT_Q12.raw()
                     {
                         enemy.active = false;
                     }
@@ -267,20 +290,23 @@ impl World {
         self.player_x = Self::clamp_q12(
             self.player_x + crate::fixed::Q12_4(i16::from(move_x) * 32),
             0,
-            10_240,
+            SCREEN_WIDTH_Q12.raw(),
         );
         self.player_y = Self::clamp_q12(
             self.player_y + crate::fixed::Q12_4(i16::from(move_y) * 32),
             0,
-            5_120,
+            SCREEN_HEIGHT_Q12.raw(),
         );
     }
 
-    pub fn update_projectiles(&mut self, fire: bool) {
+    pub fn update_projectiles(&mut self, fire_held: bool, fire_trigger: bool) {
         self.player_bullets.for_each_active_mut(|bullet| {
             bullet.x += bullet.velocity_x;
             bullet.y += bullet.velocity_y;
-            if bullet.y.raw() < -512 || bullet.x.raw() < -128 || bullet.x.raw() >= 10_368 {
+            if bullet.y.raw() < -512
+                || bullet.x.raw() < -128
+                || bullet.x.raw() >= SCREEN_WIDTH_Q12.raw() + 128
+            {
                 bullet.active = false;
             }
         });
@@ -288,30 +314,45 @@ impl World {
             bullet.x += bullet.velocity_x;
             bullet.y += bullet.velocity_y;
             if bullet.y.raw() < -512
-                || bullet.y.raw() >= 5_312
+                || bullet.y.raw() >= SCREEN_HEIGHT_Q12.raw() + 512
                 || bullet.x.raw() < -128
-                || bullet.x.raw() >= 10_368
+                || bullet.x.raw() >= SCREEN_WIDTH_Q12.raw() + 128
             {
                 bullet.active = false;
             }
         });
 
-        if self.shot_cooldown > 0 {
-            self.shot_cooldown -= 1;
+        if self.player_group_fire_cooldown > 0 {
+            self.player_group_fire_cooldown -= 1;
         }
-        if fire && self.shot_cooldown == 0 {
+
+        let max_player_bullet_groups = match self.growth_level {
+            0 => 4,
+            1 => 6,
+            2 => 8,
+            3 => 10,
+            _ => 12,
+        };
+        let interval_elapsed = self.player_group_fire_cooldown == 0;
+        if (fire_trigger || (fire_held && interval_elapsed))
+            && self.active_player_bullet_group_count() < max_player_bullet_groups
+        {
             let shot_count = match self.growth_level {
-                0 => 2,
-                1 => 4,
-                2 => 6,
-                3 => 8,
-                _ => 16,
+                0 => 1,
+                1 => 2,
+                2 => 3,
+                3 => 4,
+                _ => 5,
             };
+            let group_id = self.next_player_bullet_group_id;
+            self.next_player_bullet_group_id =
+                self.next_player_bullet_group_id.wrapping_add(1).max(1);
             for index in 0..shot_count {
-                let offset = (index as i16 * 16) - ((shot_count - 1) as i16 * 8);
+                let offset_pixels = (index as i16 * 16) - ((shot_count - 1) as i16 * 8);
                 let _ = self.player_bullets.spawn(crate::runtime::ObjectState {
                     character_id: 1,
-                    x: self.player_x + crate::fixed::Q12_4(offset),
+                    group_id,
+                    x: self.player_x + crate::fixed::Q12_4::from_int(offset_pixels),
                     y: self.player_y,
                     velocity_y: crate::fixed::Q12_4(-32),
                     ..Default::default()
@@ -320,7 +361,7 @@ impl World {
             if let Some(sound_id) = bullet_character(1).map(|data| data.fire_sound_id) {
                 self.audio_events.push(AudioEvent::Sound(sound_id));
             }
-            self.shot_cooldown = 6;
+            self.player_group_fire_cooldown = PLAYER_GROUP_FIRE_INTERVAL_FRAMES;
         }
     }
 
@@ -336,12 +377,16 @@ impl World {
             if overlaps(player_box, item_box) {
                 item.active = false;
                 collected = collected.saturating_add(1);
-            } else if item.y.raw() < -256 || item.y.raw() >= 5_376 {
+            } else if item.y.raw() < -256 || item.y.raw() >= SCREEN_HEIGHT_Q12.raw() + 256 {
                 item.active = false;
             }
         });
         if collected > 0 {
-            if self.growth_level < 4 {
+            if self.hp < PLAYER_MAX_HP {
+                for _ in 0..collected {
+                    self.recover_hp();
+                }
+            } else if self.growth_level < 4 {
                 self.growth_level = self.growth_level.saturating_add(collected).min(4);
             } else {
                 self.recovery_stock = self.recovery_stock.saturating_add(collected).min(9);
@@ -436,12 +481,12 @@ impl World {
                                         y: enemy.y,
                                         frame: 0,
                                         max_frames: if trait_data.destroy_effect_id == 2 {
-                                            60
+                                            75
                                         } else {
                                             20
                                         },
                                         size: if trait_data.destroy_effect_id == 2 {
-                                            64
+                                            160
                                         } else {
                                             24
                                         },
@@ -517,10 +562,7 @@ impl World {
             self.invincible_frames = 90;
             self.audio_events.push(AudioEvent::Sound(4));
             while self.hp < PLAYER_MAX_HP && self.recovery_stock > 0 {
-                self.hp = self
-                    .hp
-                    .saturating_add(RECOVERY_PER_STOCK)
-                    .min(PLAYER_MAX_HP);
+                self.recover_hp();
                 self.recovery_stock -= 1;
             }
             if self.hp == 0 {

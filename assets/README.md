@@ -7,6 +7,7 @@
 - `characters/boss.gif`: 64x32、32x32 タイル 2 列のボス用スプライトシート
 - `characters/growth_item.gif`: 64x32、32x32 タイル 2 列の成長アイテム用スプライトシート
 - `bullets/bullets.gif`: 96x32、32x32 タイル 3 列の自弾・敵弾用スプライトシート
+- `bullets/enemy_bullets.gif`: 16x8、8x8 タイル 2 列の敵弾用スプライトシート
 - `backgrounds/stage01_atlas.png`: 64x64 の背景タイルアトラス
 - `audio/stage01_bgm.wav`: ステージ1用の仮BGM
 - `audio/fire.wav`: 発射効果音

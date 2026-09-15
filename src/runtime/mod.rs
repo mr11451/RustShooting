@@ -1,7 +1,7 @@
 use crate::fixed::Q12_4;
 
 pub const ENEMY_CAPACITY: usize = 16;
-pub const PLAYER_BULLET_CAPACITY: usize = 16;
+pub const PLAYER_BULLET_CAPACITY: usize = 1024;
 pub const ENEMY_BULLET_CAPACITY: usize = 128;
 pub const ITEM_CAPACITY: usize = 16;
 pub const EFFECT_CAPACITY: usize = 32;
@@ -21,6 +21,7 @@ pub struct EffectState {
 pub struct ObjectState {
     pub active: bool,
     pub character_id: u16,
+    pub group_id: u32,
     pub orbit_id: u16,
     pub orbit_frame: u32,
     pub orbit_origin_x: Q12_4,

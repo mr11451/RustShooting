@@ -9,5 +9,6 @@ image = { version = "0.25", default-features = false, features = ["gif", "png"] 
 winit = "0.30"
 wgpu = "27"
 egui = "0.33"
+gilrs = "0.11"
 pollster = "0.4"
 rodio = "0.21"

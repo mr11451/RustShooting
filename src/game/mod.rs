@@ -86,7 +86,7 @@ pub fn update(world: &mut World, input: InputState) {
         world.update_enemy_movement();
         world.update_background();
         world.update_player(input.move_x, input.move_y);
-        world.update_projectiles(input.fire);
+        world.update_projectiles(input.fire, input.fire_trigger);
         world.update_items();
         world.resolve_collisions();
     }
@@ -167,6 +167,28 @@ mod tests {
     }
 
     #[test]
+    fn collected_growth_item_recovers_hp_before_leveling_up() {
+        let mut world = World {
+            hp: 75,
+            growth_level: 0,
+            recovery_stock: 0,
+            ..World::default()
+        };
+        world.items.spawn(crate::runtime::ObjectState {
+            character_id: 200,
+            x: world.player_x,
+            y: world.player_y,
+            ..Default::default()
+        });
+
+        world.update_items();
+
+        assert_eq!(world.hp, 100);
+        assert_eq!(world.growth_level, 0);
+        assert_eq!(world.recovery_stock, 0);
+    }
+
+    #[test]
     fn max_growth_converts_items_to_recovery_stock_up_to_nine() {
         let mut world = World {
             growth_level: 4,
@@ -190,37 +212,58 @@ mod tests {
     }
 
     #[test]
-    fn player_fire_uses_six_frame_cooldown() {
+    fn player_fire_adds_groups_until_level_limit() {
         let mut world = World {
             state: GameState::Playing,
             ..World::default()
         };
 
-        update(
-            &mut world,
-            InputState {
-                fire: true,
-                ..Default::default()
-            },
-        );
-        for _ in 0..5 {
-            update(
-                &mut world,
-                InputState {
-                    fire: true,
-                    ..Default::default()
-                },
-            );
+        world.update_projectiles(true, true);
+        for _ in 0..31 {
+            world.update_projectiles(true, false);
         }
         assert_eq!(world.player_bullets.active_count(), 2);
-        update(
-            &mut world,
-            InputState {
-                fire: true,
-                ..Default::default()
-            },
-        );
+        for _ in 0..90 {
+            world.update_projectiles(true, false);
+        }
         assert_eq!(world.player_bullets.active_count(), 4);
+        world.update_projectiles(true, false);
+        assert_eq!(world.player_bullets.active_count(), 4);
+
+        world.player_bullets.clear();
+        world.update_projectiles(true, true);
+        assert_eq!(world.player_bullets.active_count(), 1);
+        world.update_projectiles(true, false);
+        assert_eq!(world.player_bullets.active_count(), 1);
+    }
+
+    #[test]
+    fn trigger_fire_ignores_group_fire_interval() {
+        let mut world = World {
+            state: GameState::Playing,
+            ..World::default()
+        };
+
+        world.update_projectiles(false, true);
+        assert_eq!(world.player_bullets.active_count(), 1);
+
+        world.update_projectiles(false, true);
+        assert_eq!(world.player_bullets.active_count(), 2);
+    }
+
+    #[test]
+    fn max_level_fire_keeps_multiple_volley_bullets() {
+        let mut world = World {
+            state: GameState::Playing,
+            growth_level: 4,
+            ..World::default()
+        };
+
+        for _ in 0..61 {
+            world.update_projectiles(true, false);
+        }
+
+        assert_eq!(world.player_bullets.active_count(), 15);
     }
 
     #[test]
@@ -369,8 +412,8 @@ mod tests {
         assert_eq!(world.state, GameState::StageIntro);
         assert_eq!(world.frame, 0);
         assert_eq!(world.hp, 100);
-        assert_eq!(world.player_x, crate::fixed::Q12_4(5_120));
-        assert_eq!(world.player_y, crate::fixed::Q12_4(4_480));
+        assert_eq!(world.player_x, crate::data::PLAYER_INITIAL_X_Q12);
+        assert_eq!(world.player_y, crate::data::PLAYER_INITIAL_Y_Q12);
         assert_eq!(world.growth_level, 0);
         assert_eq!(world.recovery_stock, 0);
         assert_eq!(world.enemies.active_count(), 0);
@@ -769,7 +812,8 @@ mod tests {
             state: GameState::Playing,
             hp: 10,
             lives: 1,
-            score: 50_000,
+            score: 500_000,
+            ranking: RankingTable::default(),
             ..World::default()
         };
         world.enemy_bullets.spawn(crate::runtime::ObjectState {
@@ -786,7 +830,8 @@ mod tests {
     #[test]
     fn name_entry_saves_to_ranking_and_transitions_to_demo() {
         let mut world = World {
-            score: 50_000,
+            score: 500_000,
+            ranking: RankingTable::default(),
             ..World::default()
         };
         world.begin_name_entry();
@@ -822,7 +867,7 @@ mod tests {
 
         assert_eq!(world.state, GameState::Demo);
         assert_eq!(world.ranking.entries[0].name, *b"AAA");
-        assert_eq!(world.ranking.entries[0].score, 50_000);
+        assert_eq!(world.ranking.entries[0].score, 500_000);
     }
 
     #[test]
@@ -850,23 +895,24 @@ mod tests {
             ..World::default()
         };
         // Enemy 2 has hitbox_width=256, hitbox_height=256 (half_w=256, half_h=256).
-        // Screen bottom is 5_120. Offscreen bottom is y - 256 >= 5_120 => y >= 5_376.
+        // Screen bottom is SCREEN_HEIGHT_Q12 (10_240). Offscreen bottom is y - 256 >= 10_240 => y >= 10_496.
+        let spawn_y = crate::data::SCREEN_HEIGHT_Q12 + crate::fixed::Q12_4(230); // 10_470
         world.enemies.spawn(crate::runtime::ObjectState {
             character_id: 2,
             orbit_id: 1,      // duration_frames: 540
             orbit_frame: 541, // orbit ended
             x: crate::fixed::Q12_4(1_000),
-            y: crate::fixed::Q12_4(5_350),
+            y: spawn_y,
             ..Default::default()
         });
 
         assert_eq!(world.enemies.active_count(), 1);
 
-        // Frame 1: y becomes 5_350 + 16 = 5_366. y - 256 = 5_110 < 5_120, still active.
+        // Frame 1: y becomes 10_470 + 16 = 10_486. y - 256 = 10_230 < 10_240, still active.
         world.update_enemy_movement();
         assert_eq!(world.enemies.active_count(), 1);
 
-        // Frame 2: y becomes 5_366 + 16 = 5_382. y - 256 = 5_126 >= 5_120, despawns.
+        // Frame 2: y becomes 10_486 + 16 = 10_502. y - 256 = 10_246 >= 10_240, despawns.
         world.update_enemy_movement();
         assert_eq!(world.enemies.active_count(), 0);
     }

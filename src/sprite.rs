@@ -187,6 +187,16 @@ mod tests {
     }
 
     #[test]
+    fn loads_placeholder_enemy_bullet_sprite_sheet() {
+        let sheet = SpriteSheet::from_gif_path("assets/bullets/enemy_bullets.gif", 8, 8)
+            .expect("placeholder enemy bullet GIF should load");
+
+        assert_eq!(sheet.columns, 2);
+        assert_eq!(sheet.rows, 1);
+        assert!(sheet.frame(0, 1).is_some());
+    }
+
+    #[test]
     fn loads_placeholder_growth_item_sprite_sheet() {
         let sheet = SpriteSheet::from_gif_path("assets/characters/growth_item.gif", 32, 32)
             .expect("placeholder growth item GIF should load");

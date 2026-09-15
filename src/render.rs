@@ -1,6 +1,7 @@
 use crate::{
     assets::AssetCatalog,
     background::TileMap,
+    data::{HUD_Y, LOGICAL_HEIGHT, LOGICAL_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH},
     game::{
         GameState, World,
         name_entry::{CHAR_MATRIX, GridKey},
@@ -8,7 +9,6 @@ use crate::{
 };
 use std::borrow::Cow;
 use std::sync::Arc;
-use wgpu::util::DeviceExt;
 use winit::{dpi::PhysicalSize, window::Window};
 
 #[allow(dead_code)]
@@ -70,9 +70,11 @@ pub fn sort_render_commands(commands: &mut [RenderCommand]) {
     commands.sort_by_key(|command| command.layer());
 }
 
+const TILE_SIZE: f32 = 16.0;
+const TILE_COLUMNS: usize = (SCREEN_WIDTH / 16) as usize; // 30
+const TILE_ROWS_VISIBLE: usize = (SCREEN_HEIGHT / 16) as usize + 2; // 42
 const MAX_SOLID_VERTICES: usize = 65_536;
-const LOGICAL_WIDTH: f32 = 640.0;
-const LOGICAL_HEIGHT: f32 = 320.0;
+const MAX_BACKGROUND_VERTICES: usize = 6 * TILE_COLUMNS * TILE_ROWS_VISIBLE;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -96,11 +98,75 @@ pub struct GpuRenderer {
     pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     texture_pipeline: wgpu::RenderPipeline,
-    texture_bind_group: wgpu::BindGroup,
-    texture_vertex_buffer: wgpu::Buffer,
+    player_bind_groups: [wgpu::BindGroup; 2],
+    enemy_bind_groups: [wgpu::BindGroup; 2],
+    boss_bind_groups: [wgpu::BindGroup; 2],
+    item_bind_groups: [wgpu::BindGroup; 2],
+    bullet_player_bind_group: wgpu::BindGroup,
+    bullet_pierce_bind_group: wgpu::BindGroup,
+    enemy_bullet_bind_groups: [wgpu::BindGroup; 2],
+    sprite_vertex_buffer: wgpu::Buffer,
     background_bind_group: wgpu::BindGroup,
     background_vertex_buffer: wgpu::Buffer,
     background_map: TileMap,
+}
+
+fn create_frame_bind_group(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    layout: &wgpu::BindGroupLayout,
+    sampler: &wgpu::Sampler,
+    label: &str,
+    frame: &crate::sprite::SpriteFrame,
+) -> wgpu::BindGroup {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size: wgpu::Extent3d {
+            width: frame.width,
+            height: frame.height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &frame.rgba8,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(frame.width * 4),
+            rows_per_image: Some(frame.height),
+        },
+        wgpu::Extent3d {
+            width: frame.width,
+            height: frame.height,
+            depth_or_array_layers: 1,
+        },
+    );
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some(label),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+        ],
+    })
 }
 
 impl GpuRenderer {
@@ -214,46 +280,16 @@ impl GpuRenderer {
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let sprite_vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("dynamic sprite vertices"),
+            size: (MAX_SOLID_VERTICES * std::mem::size_of::<TextureVertex>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         let stage_assets = AssetCatalog::load_stage_one()
             .map_err(|error| format!("failed to load stage one assets: {error}"))?;
-        let sprite_sheet = stage_assets.player_sheet;
-        let sprite_frame = sprite_sheet
-            .frame(0, 0)
-            .ok_or_else(|| String::from("placeholder sprite frame is missing"))?;
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("player sprite texture"),
-            size: wgpu::Extent3d {
-                width: sprite_frame.width,
-                height: sprite_frame.height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &sprite_frame.rgba8,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(sprite_frame.width * 4),
-                rows_per_image: Some(sprite_frame.height),
-            },
-            wgpu::Extent3d {
-                width: sprite_frame.width,
-                height: sprite_frame.height,
-                depth_or_array_layers: 1,
-            },
-        );
-        let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("nearest sprite sampler"),
             mag_filter: wgpu::FilterMode::Nearest,
@@ -261,6 +297,7 @@ impl GpuRenderer {
             mipmap_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
+
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("sprite texture bind group layout"),
@@ -283,20 +320,159 @@ impl GpuRenderer {
                     },
                 ],
             });
-        let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("player sprite bind group"),
-            layout: &texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-        });
+
+        let player_frame_0 = stage_assets
+            .player_sheet
+            .frame(0, 0)
+            .ok_or("player frame 0 missing")?;
+        let player_frame_1 = stage_assets
+            .player_sheet
+            .frame(0, 1)
+            .unwrap_or(player_frame_0);
+        let player_bind_groups = [
+            create_frame_bind_group(
+                &device,
+                &queue,
+                &texture_bind_group_layout,
+                &sampler,
+                "player 0",
+                player_frame_0,
+            ),
+            create_frame_bind_group(
+                &device,
+                &queue,
+                &texture_bind_group_layout,
+                &sampler,
+                "player 1",
+                player_frame_1,
+            ),
+        ];
+
+        let enemy_frame_0 = stage_assets
+            .enemy_sheet
+            .frame(0, 0)
+            .ok_or("enemy frame 0 missing")?;
+        let enemy_frame_1 = stage_assets
+            .enemy_sheet
+            .frame(0, 1)
+            .unwrap_or(enemy_frame_0);
+        let enemy_bind_groups = [
+            create_frame_bind_group(
+                &device,
+                &queue,
+                &texture_bind_group_layout,
+                &sampler,
+                "enemy 0",
+                enemy_frame_0,
+            ),
+            create_frame_bind_group(
+                &device,
+                &queue,
+                &texture_bind_group_layout,
+                &sampler,
+                "enemy 1",
+                enemy_frame_1,
+            ),
+        ];
+
+        let boss_frame_0 = stage_assets
+            .boss_sheet
+            .frame(0, 0)
+            .ok_or("boss frame 0 missing")?;
+        let boss_frame_1 = stage_assets.boss_sheet.frame(0, 1).unwrap_or(boss_frame_0);
+        let boss_bind_groups = [
+            create_frame_bind_group(
+                &device,
+                &queue,
+                &texture_bind_group_layout,
+                &sampler,
+                "boss 0",
+                boss_frame_0,
+            ),
+            create_frame_bind_group(
+                &device,
+                &queue,
+                &texture_bind_group_layout,
+                &sampler,
+                "boss 1",
+                boss_frame_1,
+            ),
+        ];
+
+        let item_frame_0 = stage_assets
+            .item_sheet
+            .frame(0, 0)
+            .ok_or("item frame 0 missing")?;
+        let item_frame_1 = stage_assets.item_sheet.frame(0, 1).unwrap_or(item_frame_0);
+        let item_bind_groups = [
+            create_frame_bind_group(
+                &device,
+                &queue,
+                &texture_bind_group_layout,
+                &sampler,
+                "item 0",
+                item_frame_0,
+            ),
+            create_frame_bind_group(
+                &device,
+                &queue,
+                &texture_bind_group_layout,
+                &sampler,
+                "item 1",
+                item_frame_1,
+            ),
+        ];
+
+        let bullet_frame_0 = stage_assets
+            .bullet_sheet
+            .frame(0, 0)
+            .ok_or("bullet frame 0 missing")?;
+        let bullet_frame_1 = stage_assets
+            .bullet_sheet
+            .frame(0, 1)
+            .unwrap_or(bullet_frame_0);
+        let bullet_player_bind_group = create_frame_bind_group(
+            &device,
+            &queue,
+            &texture_bind_group_layout,
+            &sampler,
+            "bullet player",
+            bullet_frame_0,
+        );
+        let bullet_pierce_bind_group = create_frame_bind_group(
+            &device,
+            &queue,
+            &texture_bind_group_layout,
+            &sampler,
+            "bullet pierce",
+            bullet_frame_1,
+        );
+        let enemy_bullet_frame_0 = stage_assets
+            .enemy_bullet_sheet
+            .frame(0, 0)
+            .ok_or("enemy bullet frame 0 missing")?;
+        let enemy_bullet_frame_1 = stage_assets
+            .enemy_bullet_sheet
+            .frame(0, 1)
+            .ok_or("enemy bullet frame 1 missing")?;
+        let enemy_bullet_bind_groups = [
+            create_frame_bind_group(
+                &device,
+                &queue,
+                &texture_bind_group_layout,
+                &sampler,
+                "enemy bullet 0",
+                enemy_bullet_frame_0,
+            ),
+            create_frame_bind_group(
+                &device,
+                &queue,
+                &texture_bind_group_layout,
+                &sampler,
+                "enemy bullet 1",
+                enemy_bullet_frame_1,
+            ),
+        ];
         let background_image = stage_assets.background_atlas;
         let (background_width, background_height) = background_image.dimensions();
         let background_texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -421,21 +597,14 @@ impl GpuRenderer {
             multiview: None,
             cache: None,
         });
-        let texture_vertices = texture_vertices(304.0, 144.0, 32.0, 32.0);
-        let texture_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("player sprite vertices"),
-            contents: bytemuck::cast_slice(&texture_vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
         let background_map = TileMap::from_text_file("data/stage01_tilemap.txt")
             .map_err(|error| format!("failed to load stage one tile map: {error}"))?;
-        let background_vertices = background_tile_vertices(0, &background_map);
-        let background_vertex_buffer =
-            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("stage 1 background vertices"),
-                contents: bytemuck::cast_slice(&background_vertices),
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            });
+        let background_vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("stage 1 background vertices"),
+            size: (MAX_BACKGROUND_VERTICES * std::mem::size_of::<TextureVertex>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         Ok(Self {
             surface,
             device,
@@ -444,8 +613,14 @@ impl GpuRenderer {
             pipeline,
             vertex_buffer,
             texture_pipeline,
-            texture_bind_group,
-            texture_vertex_buffer,
+            player_bind_groups,
+            enemy_bind_groups,
+            boss_bind_groups,
+            item_bind_groups,
+            bullet_player_bind_group,
+            bullet_pierce_bind_group,
+            enemy_bullet_bind_groups,
+            sprite_vertex_buffer,
             background_bind_group,
             background_vertex_buffer,
             background_map,
@@ -464,7 +639,7 @@ impl GpuRenderer {
     pub fn render(&mut self, world: &World) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
 
-        // Generate solid vertices for UI, HUD, and game objects
+        // Generate solid vertices for UI, HUD, and effects
         let mut solid_vertices = Vec::new();
         build_world_vertices(world, &mut solid_vertices);
 
@@ -480,21 +655,148 @@ impl GpuRenderer {
         // Update background scroll
         let background_vertices =
             background_tile_vertices(world.background_scroll.raw(), &self.background_map);
-        self.queue.write_buffer(
-            &self.background_vertex_buffer,
-            0,
-            bytemuck::cast_slice(&background_vertices),
-        );
+        if !background_vertices.is_empty() {
+            let write_len = background_vertices.len().min(MAX_BACKGROUND_VERTICES);
+            self.queue.write_buffer(
+                &self.background_vertex_buffer,
+                0,
+                bytemuck::cast_slice(&background_vertices[..write_len]),
+            );
+        }
 
-        // Update player sprite position
-        let px = (world.player_x.raw() as f32 / 16.0) - 16.0;
-        let py = (world.player_y.raw() as f32 / 16.0) - 16.0;
-        let p_vertices = texture_vertices(px, py, 32.0, 32.0);
-        self.queue.write_buffer(
-            &self.texture_vertex_buffer,
-            0,
-            bytemuck::cast_slice(&p_vertices),
-        );
+        // Animation frame indices
+        let anim_frame = if (world.frame / 8).is_multiple_of(2) {
+            1
+        } else {
+            0
+        };
+        let player_anim = if (world.frame / 6).is_multiple_of(2) {
+            1
+        } else {
+            0
+        };
+        let boss_anim = if (world.frame / 10).is_multiple_of(2) {
+            1
+        } else {
+            0
+        };
+
+        // Collect sprite batches
+        let mut all_sprite_vertices: Vec<TextureVertex> = Vec::new();
+
+        // 1. Enemy sprites
+        let enemy_start = all_sprite_vertices.len();
+        world.enemies.for_each_active(|e| {
+            if e.character_id < 100 {
+                let x = e.x.raw() as f32 / 16.0;
+                let y = e.y.raw() as f32 / 16.0;
+                let size = if e.character_id == 6 { 48.0 } else { 32.0 };
+                push_texture_quad(
+                    &mut all_sprite_vertices,
+                    x - size / 2.0,
+                    y - size / 2.0,
+                    size,
+                    size,
+                );
+            }
+        });
+        let enemy_end = all_sprite_vertices.len();
+
+        // 2. Boss sprites
+        let boss_start = all_sprite_vertices.len();
+        world.enemies.for_each_active(|e| {
+            if e.character_id >= 100 && e.character_id <= 105 {
+                let x = e.x.raw() as f32 / 16.0;
+                let y = e.y.raw() as f32 / 16.0;
+                // Draw large boss sprite
+                let size = match e.character_id {
+                    100 => 80.0,
+                    101 => 96.0,
+                    102 => 104.0,
+                    103 => 112.0,
+                    104 => 120.0,
+                    _ => 128.0,
+                };
+                push_texture_quad(
+                    &mut all_sprite_vertices,
+                    x - size / 2.0,
+                    y - size / 2.0,
+                    size,
+                    size,
+                );
+            }
+        });
+        let boss_end = all_sprite_vertices.len();
+
+        // 3. Item sprites
+        let item_start = all_sprite_vertices.len();
+        world.items.for_each_active(|item| {
+            let x = item.x.raw() as f32 / 16.0;
+            let y = item.y.raw() as f32 / 16.0;
+            push_texture_quad(&mut all_sprite_vertices, x - 16.0, y - 16.0, 32.0, 32.0);
+        });
+        let item_end = all_sprite_vertices.len();
+
+        // 4. Bullet sprites (player regular, player pierce, enemy)
+        let bullet_p_start = all_sprite_vertices.len();
+        world.player_bullets.for_each_active(|b| {
+            if b.character_id != 4 {
+                let x = b.x.raw() as f32 / 16.0;
+                let y = b.y.raw() as f32 / 16.0;
+                push_texture_quad(&mut all_sprite_vertices, x - 8.0, y - 16.0, 16.0, 32.0);
+            }
+        });
+        let bullet_p_end = all_sprite_vertices.len();
+
+        let bullet_pierce_start = all_sprite_vertices.len();
+        world.player_bullets.for_each_active(|b| {
+            if b.character_id == 4 {
+                let x = b.x.raw() as f32 / 16.0;
+                let y = b.y.raw() as f32 / 16.0;
+                push_texture_quad(&mut all_sprite_vertices, x - 8.0, y - 16.0, 16.0, 32.0);
+            }
+        });
+        let bullet_pierce_end = all_sprite_vertices.len();
+
+        let bullet_e0_start = all_sprite_vertices.len();
+        world.enemy_bullets.for_each_active(|b| {
+            if b.character_id != 5 {
+                let x = b.x.raw() as f32 / 16.0;
+                let y = b.y.raw() as f32 / 16.0;
+                push_texture_quad(&mut all_sprite_vertices, x - 4.0, y - 4.0, 8.0, 8.0);
+            }
+        });
+        let bullet_e0_end = all_sprite_vertices.len();
+
+        let bullet_e1_start = all_sprite_vertices.len();
+        world.enemy_bullets.for_each_active(|b| {
+            if b.character_id == 5 {
+                let x = b.x.raw() as f32 / 16.0;
+                let y = b.y.raw() as f32 / 16.0;
+                push_texture_quad(&mut all_sprite_vertices, x - 4.0, y - 4.0, 8.0, 8.0);
+            }
+        });
+        let bullet_e1_end = all_sprite_vertices.len();
+
+        // 5. Player sprite
+        let player_start = all_sprite_vertices.len();
+        let show_player = world.invincible_frames == 0 || (world.invincible_frames % 4 < 2);
+        if show_player && world.hp > 0 && world.lives > 0 {
+            let px = (world.player_x.raw() as f32 / 16.0) - 16.0;
+            let py = (world.player_y.raw() as f32 / 16.0) - 16.0;
+            push_texture_quad(&mut all_sprite_vertices, px, py, 32.0, 32.0);
+        }
+        let player_end = all_sprite_vertices.len();
+
+        // Write all sprite vertices
+        if !all_sprite_vertices.is_empty() {
+            let write_len = all_sprite_vertices.len().min(MAX_SOLID_VERTICES);
+            self.queue.write_buffer(
+                &self.sprite_vertex_buffer,
+                0,
+                bytemuck::cast_slice(&all_sprite_vertices[..write_len]),
+            );
+        }
 
         let view = output
             .texture
@@ -543,23 +845,53 @@ impl GpuRenderer {
                     | GameState::StageIntro
                     | GameState::StageClear
                     | GameState::GameOver
-            ) {
+            ) && !background_vertices.is_empty()
+            {
+                let count = background_vertices.len().min(MAX_BACKGROUND_VERTICES) as u32;
                 pass.set_pipeline(&self.texture_pipeline);
                 pass.set_bind_group(0, &self.background_bind_group, &[]);
                 pass.set_vertex_buffer(0, self.background_vertex_buffer.slice(..));
-                pass.draw(0..(6 * 40 * 20), 0..1);
+                pass.draw(0..count, 0..1);
 
-                // 2. Draw player sprite (blink if invincible)
-                let show_player = world.invincible_frames == 0 || (world.invincible_frames % 4 < 2);
-                if show_player && world.hp > 0 && world.lives > 0 {
-                    pass.set_pipeline(&self.texture_pipeline);
-                    pass.set_bind_group(0, &self.texture_bind_group, &[]);
-                    pass.set_vertex_buffer(0, self.texture_vertex_buffer.slice(..));
-                    pass.draw(0..6, 0..1);
+                // 2. Draw active sprites
+                pass.set_pipeline(&self.texture_pipeline);
+                pass.set_vertex_buffer(0, self.sprite_vertex_buffer.slice(..));
+
+                if enemy_start < enemy_end {
+                    pass.set_bind_group(0, &self.enemy_bind_groups[anim_frame], &[]);
+                    pass.draw(enemy_start as u32..enemy_end as u32, 0..1);
+                }
+                if boss_start < boss_end {
+                    pass.set_bind_group(0, &self.boss_bind_groups[boss_anim], &[]);
+                    pass.draw(boss_start as u32..boss_end as u32, 0..1);
+                }
+                if item_start < item_end {
+                    pass.set_bind_group(0, &self.item_bind_groups[anim_frame], &[]);
+                    pass.draw(item_start as u32..item_end as u32, 0..1);
+                }
+                if bullet_p_start < bullet_p_end {
+                    pass.set_bind_group(0, &self.bullet_player_bind_group, &[]);
+                    pass.draw(bullet_p_start as u32..bullet_p_end as u32, 0..1);
+                }
+                if bullet_pierce_start < bullet_pierce_end {
+                    pass.set_bind_group(0, &self.bullet_pierce_bind_group, &[]);
+                    pass.draw(bullet_pierce_start as u32..bullet_pierce_end as u32, 0..1);
+                }
+                if bullet_e0_start < bullet_e0_end {
+                    pass.set_bind_group(0, &self.enemy_bullet_bind_groups[0], &[]);
+                    pass.draw(bullet_e0_start as u32..bullet_e0_end as u32, 0..1);
+                }
+                if bullet_e1_start < bullet_e1_end {
+                    pass.set_bind_group(0, &self.enemy_bullet_bind_groups[1], &[]);
+                    pass.draw(bullet_e1_start as u32..bullet_e1_end as u32, 0..1);
+                }
+                if player_start < player_end {
+                    pass.set_bind_group(0, &self.player_bind_groups[player_anim], &[]);
+                    pass.draw(player_start as u32..player_end as u32, 0..1);
                 }
             }
 
-            // 3. Draw solid vertices (HUD, UI, Bullets, Enemies, Name Entry, Rankings)
+            // 3. Draw solid vertices (HUD, UI, Effects, Name Entry, Rankings)
             if !solid_vertices.is_empty() {
                 let count = solid_vertices.len().min(MAX_SOLID_VERTICES) as u32;
                 pass.set_pipeline(&self.pipeline);
@@ -633,6 +965,15 @@ pub fn push_char_colored(
     }
 }
 
+pub fn text_width(text: &str, scale: f32) -> f32 {
+    let char_count = text.chars().filter(|&ch| ch != '\n').count();
+    char_count as f32 * 6.0 * scale
+}
+
+pub fn text_height(scale: f32) -> f32 {
+    7.0 * scale
+}
+
 pub fn push_text_colored(
     vertices: &mut Vec<Vertex>,
     x: f32,
@@ -652,40 +993,58 @@ pub fn push_text_colored(
     }
 }
 
+pub fn push_text_centered_x(
+    vertices: &mut Vec<Vertex>,
+    y: f32,
+    text: &str,
+    color: [f32; 3],
+    scale: f32,
+) {
+    let width = text_width(text, scale);
+    let x = (LOGICAL_WIDTH - width) / 2.0;
+    push_text_colored(vertices, x, y, text, color, scale);
+}
+
+pub fn push_text_centered(
+    vertices: &mut Vec<Vertex>,
+    center_y: f32,
+    text: &str,
+    color: [f32; 3],
+    scale: f32,
+) {
+    let width = text_width(text, scale);
+    let height = text_height(scale);
+    let x = (LOGICAL_WIDTH - width) / 2.0;
+    let y = center_y - height / 2.0;
+    push_text_colored(vertices, x, y, text, color, scale);
+}
+
 pub fn build_world_vertices(world: &World, vertices: &mut Vec<Vertex>) {
     match world.state {
         GameState::Title => {
-            push_text_colored(vertices, 160.0, 90.0, "RUST SHOOTING", [0.3, 0.8, 1.0], 4.0);
+            let center_y = LOGICAL_HEIGHT / 2.0;
+            push_text_centered(vertices, center_y, "RUST SHOOTING", [0.3, 0.8, 1.0], 4.0);
             if (world.frame / 20).is_multiple_of(2) {
-                push_text_colored(
+                push_text_centered_x(
                     vertices,
-                    200.0,
-                    200.0,
+                    center_y + 80.0,
                     "PRESS SPACE TO START",
                     [1.0, 1.0, 1.0],
-                    2.0,
+                    1.6,
                 );
             }
-            push_text_colored(
+            push_text_centered_x(
                 vertices,
-                180.0,
-                280.0,
+                LOGICAL_HEIGHT - 40.0,
                 "COPYRIGHT (C) 2026 RUST SHOOTING TEAM",
                 [0.5, 0.5, 0.6],
-                1.0,
+                0.9,
             );
         }
         GameState::Demo => {
-            push_text_colored(
-                vertices,
-                200.0,
-                20.0,
-                "TOP 10 RANKINGS",
-                [1.0, 0.85, 0.2],
-                3.0,
-            );
+            push_text_centered_x(vertices, 40.0, "TOP 10 RANKINGS", [1.0, 0.85, 0.2], 2.5);
             for (i, entry) in world.ranking.entries.iter().enumerate() {
-                let y = 65.0 + i as f32 * 20.0;
+                let y = 90.0 + i as f32 * 36.0;
                 let rank_color = match i {
                     0 => [1.0, 0.85, 0.2],
                     1 => [0.85, 0.85, 0.9],
@@ -693,33 +1052,33 @@ pub fn build_world_vertices(world: &World, vertices: &mut Vec<Vertex>) {
                     _ => [0.7, 0.8, 0.9],
                 };
                 let text = format!("{:2}.   {}   {:8}", i + 1, entry.name_str(), entry.score);
-                push_text_colored(vertices, 180.0, y, &text, rank_color, 2.0);
+                push_text_centered_x(vertices, y, &text, rank_color, 1.6);
             }
             if (world.frame / 20).is_multiple_of(2) {
-                push_text_colored(
+                push_text_centered_x(
                     vertices,
-                    200.0,
-                    295.0,
+                    LOGICAL_HEIGHT - 60.0,
                     "PRESS SPACE TO START",
                     [1.0, 1.0, 1.0],
-                    2.0,
+                    1.6,
                 );
             }
         }
         GameState::NameEntry => {
-            push_text_colored(vertices, 220.0, 15.0, "NAME ENTRY", [1.0, 0.85, 0.2], 3.0);
+            push_text_centered_x(vertices, 40.0, "NAME ENTRY", [1.0, 0.85, 0.2], 2.5);
             let score_text = format!("SCORE: {:08}", world.score);
-            push_text_colored(vertices, 230.0, 50.0, &score_text, [1.0, 1.0, 1.0], 2.0);
+            push_text_centered_x(vertices, 85.0, &score_text, [1.0, 1.0, 1.0], 1.6);
 
             let name_str = std::str::from_utf8(&world.name_entry.name).unwrap_or("???");
             let name_display = format!("[ {} ]", name_str);
-            push_text_colored(vertices, 260.0, 80.0, &name_display, [0.3, 0.9, 1.0], 3.0);
+            push_text_centered_x(vertices, 125.0, &name_display, [0.3, 0.9, 1.0], 2.5);
 
             // Matrix rendering (7 cols x 6 rows)
-            let start_x = 160.0;
-            let start_y = 120.0;
             let col_w = 46.0;
-            let row_h = 24.0;
+            let row_h = 38.0;
+            let matrix_w = 7.0 * col_w;
+            let start_x = (LOGICAL_WIDTH - matrix_w) / 2.0 + 4.0;
+            let start_y = 200.0;
 
             for (r, row) in CHAR_MATRIX.iter().enumerate() {
                 for (c, &key) in row.iter().enumerate() {
@@ -769,160 +1128,40 @@ pub fn build_world_vertices(world: &World, vertices: &mut Vec<Vertex>) {
                 }
             }
 
-            push_text_colored(
+            push_text_centered_x(
                 vertices,
-                160.0,
-                295.0,
+                LOGICAL_HEIGHT - 70.0,
                 "MOVE: ARROWS   SELECT: SPACE",
                 [0.7, 0.7, 0.7],
-                1.5,
+                1.2,
             );
         }
         GameState::GameOver => {
-            push_text_colored(vertices, 200.0, 100.0, "GAME OVER", [0.9, 0.2, 0.2], 4.0);
+            push_text_colored(vertices, 45.0, 240.0, "GAME OVER", [0.9, 0.2, 0.2], 3.5);
             let score_text = format!("FINAL SCORE: {:08}", world.score);
-            push_text_colored(vertices, 200.0, 180.0, &score_text, [1.0, 1.0, 1.0], 2.0);
+            push_text_colored(vertices, 55.0, 320.0, &score_text, [1.0, 1.0, 1.0], 1.5);
         }
         GameState::Ending => {
-            push_text_colored(
+            let base_y = LOGICAL_HEIGHT * 0.32;
+            push_text_centered_x(
                 vertices,
-                120.0,
-                80.0,
+                base_y,
                 "ALL STAGES CLEARED!",
                 [1.0, 0.85, 0.2],
-                3.0,
+                2.5,
             );
-            push_text_colored(
+            push_text_centered_x(
                 vertices,
-                180.0,
-                130.0,
+                base_y + 50.0,
                 "CONGRATULATIONS!",
                 [0.3, 0.9, 0.5],
-                3.0,
+                2.5,
             );
             let score_text = format!("FINAL SCORE: {:08}", world.score);
-            push_text_colored(vertices, 200.0, 190.0, &score_text, [1.0, 1.0, 1.0], 2.0);
+            push_text_centered_x(vertices, base_y + 110.0, &score_text, [1.0, 1.0, 1.0], 1.6);
         }
         GameState::Playing | GameState::StageIntro | GameState::StageClear => {
-            // Draw gameplay elements
-            // Player bullets
-            world.player_bullets.for_each_active(|b| {
-                let x = b.x.raw() as f32 / 16.0 - 4.0;
-                let y = b.y.raw() as f32 / 16.0 - 8.0;
-                let color = if b.character_id == 4 {
-                    [0.2, 1.0, 0.9] // Penetrating bullet (cyan-bright)
-                } else {
-                    [0.3, 0.85, 1.0] // Regular bullet
-                };
-                push_rect_colored(vertices, x, y, 8.0, 16.0, color);
-            });
-
-            // Enemies
-            world.enemies.for_each_active(|e| {
-                let x = e.x.raw() as f32 / 16.0;
-                let y = e.y.raw() as f32 / 16.0;
-                match e.character_id {
-                    100..=105 => {
-                        // Bosses
-                        let boss_color = match e.character_id {
-                            100 => [0.9, 0.2, 0.3], // Red
-                            101 => [0.9, 0.5, 0.1], // Orange
-                            102 => [0.7, 0.2, 0.9], // Purple
-                            103 => [0.1, 0.8, 0.9], // Cyan
-                            104 => [0.8, 0.8, 0.2], // Yellow
-                            _ => [1.0, 0.1, 0.4],   // Omega Red-Pink
-                        };
-                        push_rect_colored(vertices, x - 32.0, y - 24.0, 64.0, 48.0, boss_color);
-                        // Boss core
-                        let pulse = (world.frame % 20 < 10) as i32;
-                        let core_color = if pulse == 1 {
-                            [1.0, 1.0, 1.0]
-                        } else {
-                            [1.0, 0.8, 0.0]
-                        };
-                        push_rect_colored(vertices, x - 12.0, y - 10.0, 24.0, 20.0, core_color);
-                    }
-                    6 => {
-                        // Mid-boss Cruiser
-                        push_rect_colored(
-                            vertices,
-                            x - 20.0,
-                            y - 16.0,
-                            40.0,
-                            32.0,
-                            [0.8, 0.3, 0.5],
-                        );
-                        push_rect_colored(vertices, x - 8.0, y - 6.0, 16.0, 12.0, [1.0, 0.9, 0.2]);
-                    }
-                    4 => {
-                        // Heavy Turret Enemy
-                        push_rect_colored(
-                            vertices,
-                            x - 12.0,
-                            y - 12.0,
-                            24.0,
-                            24.0,
-                            [0.2, 0.5, 0.9],
-                        );
-                    }
-                    5 => {
-                        // Spreader Enemy
-                        push_rect_colored(
-                            vertices,
-                            x - 10.0,
-                            y - 10.0,
-                            20.0,
-                            20.0,
-                            [0.7, 0.3, 0.8],
-                        );
-                    }
-                    3 => {
-                        // Fast/Rush Enemy
-                        push_rect_colored(vertices, x - 8.0, y - 8.0, 16.0, 16.0, [0.9, 0.8, 0.1]);
-                    }
-                    _ => {
-                        // Standard Enemy
-                        push_rect_colored(vertices, x - 8.0, y - 8.0, 16.0, 16.0, [0.9, 0.4, 0.1]);
-                    }
-                }
-            });
-
-            // Enemy bullets
-            world.enemy_bullets.for_each_active(|b| {
-                let x = b.x.raw() as f32 / 16.0;
-                let y = b.y.raw() as f32 / 16.0;
-                match b.character_id {
-                    3 => {
-                        // Heavy Bullet
-                        push_rect_colored(vertices, x - 5.0, y - 5.0, 10.0, 10.0, [1.0, 0.4, 0.1]);
-                        push_rect_colored(vertices, x - 2.0, y - 2.0, 4.0, 4.0, [1.0, 1.0, 0.8]);
-                    }
-                    5 => {
-                        // Fast Bullet
-                        push_rect_colored(vertices, x - 3.0, y - 3.0, 6.0, 6.0, [0.9, 0.1, 0.8]);
-                    }
-                    _ => {
-                        // Standard Bullet
-                        push_rect_colored(vertices, x - 3.0, y - 3.0, 6.0, 6.0, [1.0, 0.2, 0.3]);
-                    }
-                }
-            });
-
-            // Items
-            world.items.for_each_active(|item| {
-                let x = item.x.raw() as f32 / 16.0 - 6.0;
-                let y = item.y.raw() as f32 / 16.0 - 6.0;
-                let pulse = (world.frame % 10 < 5) as i32;
-                let color = if pulse == 1 {
-                    [0.3, 1.0, 0.5]
-                } else {
-                    [0.1, 0.8, 0.3]
-                };
-                push_rect_colored(vertices, x, y, 12.0, 12.0, color);
-                push_text_colored(vertices, x + 2.0, y + 2.0, "P", [1.0, 1.0, 1.0], 1.2);
-            });
-
-            // Destruction and growth effects
+            // Destruction and growth effects (rendered with solid vertices)
             world.effects.for_each_active(|effect| {
                 let x = effect.x.raw() as f32 / 16.0;
                 let y = effect.y.raw() as f32 / 16.0;
@@ -990,7 +1229,7 @@ pub fn build_world_vertices(world: &World, vertices: &mut Vec<Vertex>) {
             // Stage Intro / Clear banners
             if world.state == GameState::StageIntro {
                 let text = format!("STAGE {:02}", world.stage_id);
-                push_text_colored(vertices, 240.0, 130.0, &text, [1.0, 1.0, 1.0], 3.0);
+                push_text_colored(vertices, 175.0, 260.0, &text, [1.0, 1.0, 1.0], 2.5);
                 let subtext = match world.stage_id {
                     1 => "ASTEROID BELT",
                     2 => "SPACE STATION",
@@ -1000,25 +1239,54 @@ pub fn build_world_vertices(world: &World, vertices: &mut Vec<Vertex>) {
                     6 => "FINAL: CORE INTRUSION",
                     _ => "UNKNOWN REGION",
                 };
-                push_text_colored(vertices, 230.0, 160.0, subtext, [0.3, 0.85, 1.0], 1.5);
-                push_text_colored(vertices, 245.0, 185.0, "READY!", [1.0, 0.85, 0.2], 2.0);
+                push_text_colored(vertices, 140.0, 310.0, subtext, [0.3, 0.85, 1.0], 1.5);
+                push_text_colored(vertices, 195.0, 350.0, "READY!", [1.0, 0.85, 0.2], 2.0);
             } else if world.state == GameState::StageClear {
                 let text = format!("STAGE {:02} CLEAR!", world.stage_id);
-                push_text_colored(vertices, 200.0, 140.0, &text, [1.0, 0.85, 0.2], 3.0);
+                push_text_colored(vertices, 125.0, 280.0, &text, [1.0, 0.85, 0.2], 2.2);
             }
 
-            // HUD rendering at bottom line (y=304..312)
+            // HUD rendering at bottom line
             append_hud_vertices(world, vertices);
         }
     }
 }
 
-pub fn append_hud_vertices(world: &World, vertices: &mut Vec<Vertex>) {
-    // HUD background bar (x=0, y=304, width=640, height=16)
-    push_rect_colored(vertices, 0.0, 304.0, 640.0, 16.0, [0.03, 0.04, 0.08]);
+fn push_texture_quad(vertices: &mut Vec<TextureVertex>, x: f32, y: f32, width: f32, height: f32) {
+    let left = x / LOGICAL_WIDTH * 2.0 - 1.0;
+    let right = (x + width) / LOGICAL_WIDTH * 2.0 - 1.0;
+    let top = 1.0 - y / LOGICAL_HEIGHT * 2.0;
+    let bottom = 1.0 - (y + height) / LOGICAL_HEIGHT * 2.0;
+    vertices.extend([
+        TextureVertex {
+            position: [left, top],
+            uv: [0.0, 0.0],
+        },
+        TextureVertex {
+            position: [right, top],
+            uv: [1.0, 0.0],
+        },
+        TextureVertex {
+            position: [right, bottom],
+            uv: [1.0, 1.0],
+        },
+        TextureVertex {
+            position: [left, top],
+            uv: [0.0, 0.0],
+        },
+        TextureVertex {
+            position: [right, bottom],
+            uv: [1.0, 1.0],
+        },
+        TextureVertex {
+            position: [left, bottom],
+            uv: [0.0, 1.0],
+        },
+    ]);
+}
 
-    // 1. HP Gauge (x=8, y=304, width=160, height=8)
-    push_rect_colored(vertices, 8.0, 306.0, 160.0, 10.0, [0.2, 0.15, 0.15]);
+fn append_hud_vertices(world: &World, vertices: &mut Vec<Vertex>) {
+    push_rect_colored(vertices, 8.0, HUD_Y + 3.0, 120.0, 10.0, [0.2, 0.15, 0.15]);
     let hp_ratio = (world.hp as f32 / 100.0).clamp(0.0, 1.0);
     let hp_color = if world.hp > 50 {
         [0.15, 0.9, 0.3]
@@ -1027,23 +1295,44 @@ pub fn append_hud_vertices(world: &World, vertices: &mut Vec<Vertex>) {
     } else {
         [0.95, 0.2, 0.2]
     };
-    push_rect_colored(vertices, 8.0, 306.0, 160.0 * hp_ratio, 10.0, hp_color);
+    push_rect_colored(vertices, 8.0, HUD_Y + 3.0, 120.0 * hp_ratio, 10.0, hp_color);
 
-    // 2. Score (x=176, y=304, width=160, height=8)
+    // 2. Score
     let score_str = format!("{:08}", world.score);
-    push_text_colored(vertices, 176.0, 307.0, &score_str, [1.0, 1.0, 1.0], 1.2);
+    push_text_colored(
+        vertices,
+        140.0,
+        HUD_Y + 4.0,
+        &score_str,
+        [1.0, 1.0, 1.0],
+        1.0,
+    );
 
-    // 3. Lives (x=344, y=304, width=96, height=8)
+    // 3. Lives
     let lives_str = format!("L:{:02}", world.lives);
-    push_text_colored(vertices, 344.0, 307.0, &lives_str, [0.3, 0.85, 1.0], 1.2);
+    push_text_colored(
+        vertices,
+        280.0,
+        HUD_Y + 4.0,
+        &lives_str,
+        [0.3, 0.85, 1.0],
+        1.0,
+    );
 
-    // 4. Stock / Growth (x=448, y=304, width=184, height=8)
+    // 4. Stock / Growth
     let stock_str = if world.growth_level < 4 {
         format!("LV:{}", world.growth_level)
     } else {
         format!("ST:+{}", world.recovery_stock)
     };
-    push_text_colored(vertices, 448.0, 307.0, &stock_str, [1.0, 0.85, 0.2], 1.2);
+    push_text_colored(
+        vertices,
+        380.0,
+        HUD_Y + 4.0,
+        &stock_str,
+        [1.0, 0.85, 0.2],
+        1.0,
+    );
 }
 
 fn glyph_bitmap(ch: char) -> [u8; 7] {
@@ -1193,45 +1482,19 @@ fn glyph_bitmap(ch: char) -> [u8; 7] {
     }
 }
 
-fn texture_vertices(x: f32, y: f32, width: f32, height: f32) -> [TextureVertex; 6] {
-    let left = x / LOGICAL_WIDTH * 2.0 - 1.0;
-    let right = (x + width) / LOGICAL_WIDTH * 2.0 - 1.0;
-    let top = 1.0 - y / LOGICAL_HEIGHT * 2.0;
-    let bottom = 1.0 - (y + height) / LOGICAL_HEIGHT * 2.0;
-    [
-        TextureVertex {
-            position: [left, top],
-            uv: [0.0, 0.0],
-        },
-        TextureVertex {
-            position: [right, top],
-            uv: [1.0, 0.0],
-        },
-        TextureVertex {
-            position: [right, bottom],
-            uv: [1.0, 1.0],
-        },
-        TextureVertex {
-            position: [left, top],
-            uv: [0.0, 0.0],
-        },
-        TextureVertex {
-            position: [right, bottom],
-            uv: [1.0, 1.0],
-        },
-        TextureVertex {
-            position: [left, bottom],
-            uv: [0.0, 1.0],
-        },
-    ]
-}
-
 fn background_tile_vertices(scroll_y_raw: i16, tile_map: &TileMap) -> Vec<TextureVertex> {
-    let mut vertices = Vec::with_capacity(6 * usize::from(tile_map.width) * 20);
+    let mut vertices = Vec::with_capacity(MAX_BACKGROUND_VERTICES);
     let scroll_y = f32::from(scroll_y_raw) / 16.0;
-    for row in 0..20 {
-        for column in 0..tile_map.width {
-            let tile_id = tile_map.tile_id(row % tile_map.height as i32, column);
+    let tile_map_width = tile_map.width.max(1);
+    let tile_map_height = tile_map.height.max(1);
+
+    let first_row = (-scroll_y / TILE_SIZE).floor() as i32;
+    for row_idx in 0..TILE_ROWS_VISIBLE {
+        let row = first_row + row_idx as i32;
+        let map_row = row.rem_euclid(tile_map_height as i32);
+        let screen_y = row as f32 * TILE_SIZE + scroll_y;
+        for column in 0..TILE_COLUMNS {
+            let tile_id = tile_map.tile_id(map_row, (column as u16) % tile_map_width);
             if tile_id == 0 {
                 continue;
             }
@@ -1241,10 +1504,10 @@ fn background_tile_vertices(scroll_y_raw: i16, tile_map: &TileMap) -> Vec<Textur
             let v0 = atlas_y * 0.25;
             let u1 = u0 + 0.25;
             let v1 = v0 + 0.25;
-            let left = column as f32 * 16.0 / LOGICAL_WIDTH * 2.0 - 1.0;
-            let right = (column as f32 * 16.0 + 16.0) / LOGICAL_WIDTH * 2.0 - 1.0;
-            let top = 1.0 - (row as f32 * 16.0 - scroll_y) / LOGICAL_HEIGHT * 2.0;
-            let bottom = 1.0 - (row as f32 * 16.0 + 16.0 - scroll_y) / LOGICAL_HEIGHT * 2.0;
+            let left = column as f32 * TILE_SIZE / LOGICAL_WIDTH * 2.0 - 1.0;
+            let right = (column as f32 * TILE_SIZE + TILE_SIZE) / LOGICAL_WIDTH * 2.0 - 1.0;
+            let top = 1.0 - screen_y / LOGICAL_HEIGHT * 2.0;
+            let bottom = 1.0 - (screen_y + TILE_SIZE) / LOGICAL_HEIGHT * 2.0;
             vertices.extend([
                 TextureVertex {
                     position: [left, top],
@@ -1289,7 +1552,7 @@ fn logical_viewport(width: u32, height: u32) -> (f32, f32, f32, f32) {
 }
 
 fn window_size(_surface: &wgpu::Surface<'static>) -> PhysicalSize<u32> {
-    PhysicalSize::new(1280, 640)
+    PhysicalSize::new(u32::from(SCREEN_WIDTH) * 2, u32::from(SCREEN_HEIGHT) * 2)
 }
 
 #[cfg(test)]

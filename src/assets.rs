@@ -35,10 +35,11 @@ impl From<image::ImageError> for AssetError {
 
 pub struct StageAssets {
     pub player_sheet: SpriteSheet,
-    #[allow(dead_code)]
     pub enemy_sheet: SpriteSheet,
-    #[allow(dead_code)]
     pub boss_sheet: SpriteSheet,
+    pub item_sheet: SpriteSheet,
+    pub bullet_sheet: SpriteSheet,
+    pub enemy_bullet_sheet: SpriteSheet,
     pub background_atlas: RgbaImage,
 }
 
@@ -73,6 +74,9 @@ impl AssetCatalog {
             "assets/characters/player.gif",
             "assets/characters/enemy_basic.gif",
             "assets/characters/boss.gif",
+            "assets/characters/growth_item.gif",
+            "assets/bullets/bullets.gif",
+            "assets/bullets/enemy_bullets.gif",
             "assets/backgrounds/stage01_atlas.png",
         )
     }
@@ -81,16 +85,25 @@ impl AssetCatalog {
         character_path: impl AsRef<Path>,
         enemy_path: impl AsRef<Path>,
         boss_path: impl AsRef<Path>,
+        item_path: impl AsRef<Path>,
+        bullet_path: impl AsRef<Path>,
+        enemy_bullet_path: impl AsRef<Path>,
         background_path: impl AsRef<Path>,
     ) -> Result<StageAssets, AssetError> {
         let player_sheet = SpriteSheet::from_gif_path(character_path, 32, 32)?;
         let enemy_sheet = SpriteSheet::from_gif_path(enemy_path, 32, 32)?;
-        let boss_sheet = SpriteSheet::from_gif_path(boss_path, 32, 32)?;
+        let boss_sheet = SpriteSheet::from_gif_path(boss_path, 64, 64)?;
+        let item_sheet = SpriteSheet::from_gif_path(item_path, 32, 32)?;
+        let bullet_sheet = SpriteSheet::from_gif_path(bullet_path, 32, 32)?;
+        let enemy_bullet_sheet = SpriteSheet::from_gif_path(enemy_bullet_path, 8, 8)?;
         let background_atlas = image::open(background_path)?.into_rgba8();
         Ok(StageAssets {
             player_sheet,
             enemy_sheet,
             boss_sheet,
+            item_sheet,
+            bullet_sheet,
+            enemy_bullet_sheet,
             background_atlas,
         })
     }
@@ -106,6 +119,13 @@ mod tests {
         assert_eq!(assets.player_sheet.columns, 2);
         assert_eq!(assets.enemy_sheet.columns, 2);
         assert_eq!(assets.boss_sheet.columns, 2);
+        assert_eq!(assets.item_sheet.columns, 2);
+        assert_eq!(assets.bullet_sheet.columns, 3);
+        assert_eq!(assets.enemy_bullet_sheet.columns, 2);
+        assert_eq!(assets.enemy_bullet_sheet.frame_width, 8);
+        assert_eq!(assets.enemy_bullet_sheet.frame_height, 8);
+        assert_eq!(assets.boss_sheet.frame_width, 64);
+        assert_eq!(assets.boss_sheet.frame_height, 64);
         assert_eq!(assets.background_atlas.dimensions(), (64, 64));
     }
 

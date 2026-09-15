@@ -1,6 +1,12 @@
+pub mod name_entry;
+pub mod ranking;
 mod state;
 mod world;
 
+pub use name_entry::NameEntryState;
+#[allow(unused_imports)]
+pub use ranking::RankingEntry;
+pub use ranking::RankingTable;
 pub use state::GameState;
 pub use world::World;
 
@@ -13,8 +19,24 @@ pub fn update(world: &mut World, input: InputState) {
     }
 
     match world.state {
-        GameState::Title if input.start => world.state = GameState::StageIntro,
-        GameState::Demo if input.start => world.state = GameState::StageIntro,
+        GameState::Title => {
+            if input.start || input.fire {
+                world.frame = 0;
+                world.state = GameState::StageIntro;
+            } else if world.frame.saturating_add(1) >= 900 {
+                world.frame = 0;
+                world.state = GameState::Demo;
+            }
+        }
+        GameState::Demo => {
+            if input.start || input.fire {
+                world.frame = 0;
+                world.state = GameState::StageIntro;
+            } else if world.frame.saturating_add(1) >= 900 {
+                world.frame = 0;
+                world.state = GameState::Title;
+            }
+        }
         GameState::StageIntro if world.frame.saturating_add(1) >= 90 => {
             world.frame = 0;
             world.state = GameState::Playing;
@@ -24,7 +46,7 @@ pub fn update(world: &mut World, input: InputState) {
                 world.state = GameState::Ending;
             } else {
                 world.stage_id += 1;
-                world.reset_stage();
+                world.advance_to_next_stage();
                 world.state = GameState::StageIntro;
             }
         }
@@ -32,9 +54,29 @@ pub fn update(world: &mut World, input: InputState) {
             world.reset_stage();
             world.state = GameState::Title;
         }
-        GameState::NameEntry if world.frame.saturating_add(1) >= 900 => {
-            world.frame = 0;
-            world.state = GameState::Demo;
+        GameState::NameEntry => {
+            let finished = world.name_entry.update_input(
+                input.move_x,
+                input.move_y,
+                input.fire || input.start,
+            );
+            if finished {
+                world.ranking.insert(world.name_entry.name, world.score);
+                let _ = world.ranking.save_default();
+                world.frame = 0;
+                world.state = GameState::Demo;
+            } else if world.frame.saturating_add(1) >= 900 {
+                world.frame = 0;
+                world.state = GameState::Demo;
+            }
+        }
+        GameState::Ending if world.frame.saturating_add(1) >= 900 => {
+            if world.ranking.is_high_score(world.score) {
+                world.begin_name_entry();
+            } else {
+                world.reset_stage();
+                world.state = GameState::Title;
+            }
         }
         _ => {}
     }
@@ -49,6 +91,7 @@ pub fn update(world: &mut World, input: InputState) {
         world.resolve_collisions();
     }
 
+    world.update_effects();
     world.frame = world.frame.saturating_add(1);
 }
 
@@ -718,5 +761,224 @@ mod tests {
         world.resolve_player_hits();
         assert_eq!(world.state, GameState::GameOver);
         assert_eq!(world.lives, 0);
+    }
+
+    #[test]
+    fn last_life_loss_enters_name_entry_when_high_score() {
+        let mut world = World {
+            state: GameState::Playing,
+            hp: 10,
+            lives: 1,
+            score: 50_000,
+            ..World::default()
+        };
+        world.enemy_bullets.spawn(crate::runtime::ObjectState {
+            character_id: 2,
+            x: world.player_x,
+            y: world.player_y,
+            ..Default::default()
+        });
+        world.resolve_player_hits();
+        assert_eq!(world.state, GameState::NameEntry);
+        assert_eq!(world.lives, 0);
+    }
+
+    #[test]
+    fn name_entry_saves_to_ranking_and_transitions_to_demo() {
+        let mut world = World {
+            score: 50_000,
+            ..World::default()
+        };
+        world.begin_name_entry();
+
+        // Type 'A'
+        update(
+            &mut world,
+            InputState {
+                fire: true,
+                ..Default::default()
+            },
+        );
+        update(&mut world, InputState::default());
+
+        // Type 'A'
+        update(
+            &mut world,
+            InputState {
+                fire: true,
+                ..Default::default()
+            },
+        );
+        update(&mut world, InputState::default());
+
+        // Type 'A'
+        update(
+            &mut world,
+            InputState {
+                fire: true,
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(world.state, GameState::Demo);
+        assert_eq!(world.ranking.entries[0].name, *b"AAA");
+        assert_eq!(world.ranking.entries[0].score, 50_000);
+    }
+
+    #[test]
+    fn title_and_demo_timeout_transition() {
+        let mut world = World {
+            state: GameState::Title,
+            ..World::default()
+        };
+        for _ in 0..900 {
+            update(&mut world, InputState::default());
+        }
+        assert_eq!(world.state, GameState::Demo);
+
+        for _ in 0..900 {
+            update(&mut world, InputState::default());
+        }
+        assert_eq!(world.state, GameState::Title);
+    }
+
+    #[test]
+    fn enemy_after_orbit_completion_moves_with_background_and_despawns_offscreen() {
+        let mut world = World {
+            state: GameState::Playing,
+            background_speed: crate::fixed::Q12_4(16),
+            ..World::default()
+        };
+        // Enemy 2 has hitbox_width=256, hitbox_height=256 (half_w=256, half_h=256).
+        // Screen bottom is 5_120. Offscreen bottom is y - 256 >= 5_120 => y >= 5_376.
+        world.enemies.spawn(crate::runtime::ObjectState {
+            character_id: 2,
+            orbit_id: 1,      // duration_frames: 540
+            orbit_frame: 541, // orbit ended
+            x: crate::fixed::Q12_4(1_000),
+            y: crate::fixed::Q12_4(5_350),
+            ..Default::default()
+        });
+
+        assert_eq!(world.enemies.active_count(), 1);
+
+        // Frame 1: y becomes 5_350 + 16 = 5_366. y - 256 = 5_110 < 5_120, still active.
+        world.update_enemy_movement();
+        assert_eq!(world.enemies.active_count(), 1);
+
+        // Frame 2: y becomes 5_366 + 16 = 5_382. y - 256 = 5_126 >= 5_120, despawns.
+        world.update_enemy_movement();
+        assert_eq!(world.enemies.active_count(), 0);
+    }
+
+    #[test]
+    fn enemy_during_orbit_is_not_despawned_offscreen() {
+        let mut world = World {
+            state: GameState::Playing,
+            ..World::default()
+        };
+        // Enemy spawned way above screen at y = -16_000
+        world.enemies.spawn(crate::runtime::ObjectState {
+            character_id: 2,
+            orbit_id: 1, // duration_frames: 540
+            orbit_frame: 10,
+            x: crate::fixed::Q12_4(1_000),
+            y: crate::fixed::Q12_4(-16_000),
+            velocity_y: crate::fixed::Q12_4(16),
+            ..Default::default()
+        });
+
+        world.update_enemy_movement();
+        assert_eq!(world.enemies.active_count(), 1);
+    }
+
+    #[test]
+    fn full_gameplay_through_all_six_stages_preserves_growth_and_reaches_ending() {
+        let mut world = World {
+            state: GameState::StageIntro,
+            stage_id: 1,
+            growth_level: 3,
+            recovery_stock: 2,
+            ..World::default()
+        };
+
+        for expected_stage in 1..=6 {
+            assert_eq!(world.stage_id, expected_stage);
+            assert_eq!(world.growth_level, 3);
+            assert_eq!(world.recovery_stock, 2);
+
+            // Intro completes after 90 frames
+            for _ in 0..90 {
+                update(&mut world, InputState::default());
+            }
+            assert_eq!(world.state, GameState::Playing);
+
+            // Defeat the boss of this stage
+            let boss_id = match expected_stage {
+                1 => 100,
+                2 => 101,
+                3 => 102,
+                4 => 103,
+                5 => 104,
+                _ => 105,
+            };
+            world.enemies.spawn(crate::runtime::ObjectState {
+                character_id: boss_id,
+                x: world.player_x,
+                y: world.player_y,
+                hp: 1,
+                ..Default::default()
+            });
+            world.player_bullets.spawn(crate::runtime::ObjectState {
+                character_id: 1,
+                x: world.player_x,
+                y: world.player_y,
+                ..Default::default()
+            });
+
+            world.resolve_collisions();
+            assert_eq!(world.state, GameState::StageClear);
+
+            // Clear completes after 90 frames
+            for _ in 0..90 {
+                update(&mut world, InputState::default());
+            }
+
+            if expected_stage < 6 {
+                assert_eq!(world.stage_id, expected_stage + 1);
+                assert_eq!(world.state, GameState::StageIntro);
+            } else {
+                assert_eq!(world.state, GameState::Ending);
+            }
+        }
+    }
+
+    #[test]
+    fn enemy_and_item_destruction_spawns_effects() {
+        let mut world = World {
+            state: GameState::Playing,
+            ..World::default()
+        };
+
+        // Enemy defeat spawns destruction effect
+        world.enemies.spawn(crate::runtime::ObjectState {
+            character_id: 2,
+            x: crate::fixed::Q12_4(100),
+            y: crate::fixed::Q12_4(100),
+            hp: 1,
+            ..Default::default()
+        });
+        world.player_bullets.spawn(crate::runtime::ObjectState {
+            character_id: 1,
+            x: crate::fixed::Q12_4(100),
+            y: crate::fixed::Q12_4(100),
+            ..Default::default()
+        });
+        world.resolve_collisions();
+        assert_eq!(world.effects.active_count(), 1);
+
+        // Update effects advances frame
+        world.update_effects();
+        assert_eq!(world.effects.active_count(), 1);
     }
 }

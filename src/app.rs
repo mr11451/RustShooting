@@ -83,8 +83,27 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => {
                 let now = Instant::now();
                 if self.next_frame.is_none_or(|deadline| now >= deadline) {
+                    let prev_state = self.world.state;
                     game::update(&mut self.world, self.input);
-                    if let Some(audio) = &self.audio {
+                    if let Some(audio) = &mut self.audio {
+                        if matches!(
+                            self.world.state,
+                            game::GameState::StageIntro
+                                | game::GameState::Playing
+                                | game::GameState::StageClear
+                        ) {
+                            audio.play_stage_bgm(self.world.stage_id);
+                        } else if matches!(
+                            self.world.state,
+                            game::GameState::Title
+                                | game::GameState::Demo
+                                | game::GameState::NameEntry
+                                | game::GameState::GameOver
+                                | game::GameState::Ending
+                        ) && prev_state != self.world.state
+                        {
+                            audio.stop_bgm();
+                        }
                         for event in self.world.drain_audio_events() {
                             audio.play_event(event);
                         }
@@ -119,35 +138,47 @@ impl ApplicationHandler for App {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let deadline = self.next_frame.unwrap_or_else(Instant::now);
         event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
-        if Instant::now() >= deadline {
-            if let Some(window) = &self.window {
-                window.request_redraw();
-            }
+        if Instant::now() >= deadline
+            && let Some(window) = &self.window
+        {
+            window.request_redraw();
         }
     }
 }
 
 impl App {
     fn handle_key(&mut self, state: ElementState, key: PhysicalKey) {
+        let is_pressed = state == ElementState::Pressed;
         match key {
-            PhysicalKey::Code(KeyCode::Space) if state == ElementState::Pressed => {
-                self.input.start = true
+            PhysicalKey::Code(KeyCode::Space) | PhysicalKey::Code(KeyCode::KeyZ) => {
+                self.input.fire = is_pressed;
+                if is_pressed {
+                    self.input.start = true;
+                }
             }
-            PhysicalKey::Code(KeyCode::Escape) if state == ElementState::Pressed => {
-                self.input.quit = true
+            PhysicalKey::Code(KeyCode::Enter) | PhysicalKey::Code(KeyCode::KeyX) => {
+                if is_pressed {
+                    self.input.start = true;
+                    self.input.fire = true;
+                } else {
+                    self.input.fire = false;
+                }
             }
-            PhysicalKey::Code(KeyCode::ArrowLeft) => self
-                .input
-                .set_move_key(MoveAxis::Left, state == ElementState::Pressed),
-            PhysicalKey::Code(KeyCode::ArrowRight) => self
-                .input
-                .set_move_key(MoveAxis::Right, state == ElementState::Pressed),
-            PhysicalKey::Code(KeyCode::ArrowUp) => self
-                .input
-                .set_move_key(MoveAxis::Up, state == ElementState::Pressed),
-            PhysicalKey::Code(KeyCode::ArrowDown) => self
-                .input
-                .set_move_key(MoveAxis::Down, state == ElementState::Pressed),
+            PhysicalKey::Code(KeyCode::Escape) if is_pressed => {
+                self.input.quit = true;
+            }
+            PhysicalKey::Code(KeyCode::ArrowLeft) | PhysicalKey::Code(KeyCode::KeyA) => {
+                self.input.set_move_key(MoveAxis::Left, is_pressed);
+            }
+            PhysicalKey::Code(KeyCode::ArrowRight) | PhysicalKey::Code(KeyCode::KeyD) => {
+                self.input.set_move_key(MoveAxis::Right, is_pressed);
+            }
+            PhysicalKey::Code(KeyCode::ArrowUp) | PhysicalKey::Code(KeyCode::KeyW) => {
+                self.input.set_move_key(MoveAxis::Up, is_pressed);
+            }
+            PhysicalKey::Code(KeyCode::ArrowDown) | PhysicalKey::Code(KeyCode::KeyS) => {
+                self.input.set_move_key(MoveAxis::Down, is_pressed);
+            }
             _ => {}
         }
     }

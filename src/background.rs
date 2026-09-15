@@ -1,7 +1,10 @@
+#[allow(dead_code)]
 const FIXED_SHIFT: i32 = 4;
+#[allow(dead_code)]
 const FIXED_SCALE: i32 = 1 << FIXED_SHIFT;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[allow(dead_code)]
 pub struct TileSet {
     pub texture_id: u16,
     pub tile_width: u16,
@@ -57,6 +60,7 @@ impl TileMap {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[allow(dead_code)]
 pub struct VisibleTile {
     pub tile_id: u16,
     pub atlas_x: u16,
@@ -65,6 +69,7 @@ pub struct VisibleTile {
     pub screen_y: i32,
 }
 
+#[allow(dead_code)]
 pub fn visible_tiles(
     tile_set: TileSet,
     tile_map: &TileMap,
@@ -87,8 +92,7 @@ pub fn visible_tiles(
         scroll_y_raw + i32::from(viewport_height) * FIXED_SCALE - 1,
         tile_height_raw,
     );
-    let visible_columns = (u32::from(viewport_width) + u32::from(tile_set.tile_width) - 1)
-        / u32::from(tile_set.tile_width);
+    let visible_columns = u32::from(viewport_width).div_ceil(u32::from(tile_set.tile_width));
     let column_count = visible_columns.min(u32::from(tile_map.width));
     let mut result = Vec::new();
 
@@ -118,6 +122,7 @@ pub fn visible_tiles(
     result
 }
 
+#[allow(dead_code)]
 fn floor_div(value: i32, divisor: i32) -> i32 {
     let quotient = value / divisor;
     let remainder = value % divisor;

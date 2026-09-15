@@ -5,8 +5,10 @@ pub struct Q12_4(pub i16);
 
 impl Q12_4 {
     pub const ZERO: Self = Self(0);
+    #[allow(dead_code)]
     pub const ONE: Self = Self(16);
 
+    #[allow(dead_code)]
     pub const fn from_int(value: i16) -> Self {
         Self(value.saturating_mul(16))
     }

@@ -1,5 +1,6 @@
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum GameState {
+    #[default]
     Title,
     Demo,
     StageIntro,
@@ -8,10 +9,4 @@ pub enum GameState {
     GameOver,
     NameEntry,
     Ending,
-}
-
-impl Default for GameState {
-    fn default() -> Self {
-        Self::Title
-    }
 }

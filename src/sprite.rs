@@ -145,6 +145,7 @@ impl SpriteSheet {
             .find(|frame| frame.animation_id == animation_id && frame.tile_id == tile_id)
     }
 
+    #[allow(dead_code)]
     pub fn animation_count(&self) -> usize {
         self.frames
             .iter()

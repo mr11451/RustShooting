@@ -35,7 +35,9 @@ impl From<image::ImageError> for AssetError {
 
 pub struct StageAssets {
     pub player_sheet: SpriteSheet,
+    #[allow(dead_code)]
     pub enemy_sheet: SpriteSheet,
+    #[allow(dead_code)]
     pub boss_sheet: SpriteSheet,
     pub background_atlas: RgbaImage,
 }
@@ -43,11 +45,13 @@ pub struct StageAssets {
 pub struct AssetCatalog;
 
 #[derive(Default)]
+#[allow(dead_code)]
 pub struct StageAssetCache {
     pub stage_id: Option<u8>,
     pub assets: Option<StageAssets>,
 }
 
+#[allow(dead_code)]
 impl StageAssetCache {
     pub fn load_stage_one(&mut self) -> Result<&StageAssets, AssetError> {
         if self.stage_id != Some(1) {

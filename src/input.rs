@@ -26,6 +26,7 @@ pub enum MoveAxis {
     Down,
 }
 
+#[allow(dead_code)]
 pub trait PlatformInput {
     fn poll(&mut self) -> InputState;
 }

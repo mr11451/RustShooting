@@ -4,6 +4,18 @@ pub const ENEMY_CAPACITY: usize = 16;
 pub const PLAYER_BULLET_CAPACITY: usize = 16;
 pub const ENEMY_BULLET_CAPACITY: usize = 128;
 pub const ITEM_CAPACITY: usize = 16;
+pub const EFFECT_CAPACITY: usize = 32;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct EffectState {
+    pub active: bool,
+    pub effect_id: u16,
+    pub x: Q12_4,
+    pub y: Q12_4,
+    pub frame: u16,
+    pub max_frames: u16,
+    pub size: u16,
+}
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ObjectState {
@@ -19,6 +31,57 @@ pub struct ObjectState {
     pub velocity_x: Q12_4,
     pub velocity_y: Q12_4,
     pub hp: u16,
+}
+
+#[derive(Clone, Debug)]
+pub struct EffectPool {
+    effects: [EffectState; EFFECT_CAPACITY],
+}
+
+impl Default for EffectPool {
+    fn default() -> Self {
+        Self {
+            effects: [EffectState::default(); EFFECT_CAPACITY],
+        }
+    }
+}
+
+impl EffectPool {
+    pub fn spawn(&mut self, effect: EffectState) -> Option<usize> {
+        let index = self.effects.iter().position(|item| !item.active)?;
+        self.effects[index] = EffectState {
+            active: true,
+            ..effect
+        };
+        Some(index)
+    }
+
+    pub fn clear(&mut self) {
+        for effect in &mut self.effects {
+            effect.active = false;
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn active_count(&self) -> usize {
+        self.effects.iter().filter(|item| item.active).count()
+    }
+
+    pub fn for_each_active(&self, mut visitor: impl FnMut(&EffectState)) {
+        for effect in &self.effects {
+            if effect.active {
+                visitor(effect);
+            }
+        }
+    }
+
+    pub fn for_each_active_mut(&mut self, mut update: impl FnMut(&mut EffectState)) {
+        for effect in &mut self.effects {
+            if effect.active {
+                update(effect);
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -50,12 +113,22 @@ impl<const N: usize> ObjectPool<N> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn active_count(&self) -> usize {
         self.objects.iter().filter(|item| item.active).count()
     }
 
+    #[allow(dead_code)]
     pub fn first_active(&self) -> Option<&ObjectState> {
         self.objects.iter().find(|item| item.active)
+    }
+
+    pub fn for_each_active(&self, mut visitor: impl FnMut(&ObjectState)) {
+        for object in &self.objects {
+            if object.active {
+                visitor(object);
+            }
+        }
     }
 
     pub fn for_each_active_mut(&mut self, mut update: impl FnMut(&mut ObjectState)) {

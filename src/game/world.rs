@@ -2,11 +2,12 @@ use crate::{
     audio::AudioEvent,
     collision::{Hitbox, overlaps},
     data::{
-        CharacterType, ORBIT_DATA, ObjectType, OrbitType, STAGE_ONE_SCHEDULE, ScheduleData,
-        bullet_character, character_trait, fire_pattern,
+        CharacterType, ORBIT_DATA, ObjectType, OrbitType, ScheduleData, bullet_character,
+        character_trait, fire_pattern, stage_schedule,
     },
     runtime::{
-        ENEMY_BULLET_CAPACITY, ENEMY_CAPACITY, ITEM_CAPACITY, ObjectPool, PLAYER_BULLET_CAPACITY,
+        ENEMY_BULLET_CAPACITY, ENEMY_CAPACITY, EffectPool, EffectState, ITEM_CAPACITY, ObjectPool,
+        PLAYER_BULLET_CAPACITY,
     },
 };
 
@@ -35,6 +36,7 @@ pub struct World {
     pub player_bullets: ObjectPool<PLAYER_BULLET_CAPACITY>,
     pub enemy_bullets: ObjectPool<ENEMY_BULLET_CAPACITY>,
     pub items: ObjectPool<ITEM_CAPACITY>,
+    pub effects: EffectPool,
     pub shot_cooldown: u8,
     pub audio_events: Vec<AudioEvent>,
     pub background_scroll: crate::fixed::Q12_4,
@@ -44,6 +46,8 @@ pub struct World {
     pub growth_level: u8,
     pub recovery_stock: u8,
     pub invincible_frames: u16,
+    pub ranking: super::RankingTable,
+    pub name_entry: super::NameEntryState,
 }
 
 impl Default for World {
@@ -59,6 +63,7 @@ impl Default for World {
             player_bullets: ObjectPool::default(),
             enemy_bullets: ObjectPool::default(),
             items: ObjectPool::default(),
+            effects: EffectPool::default(),
             shot_cooldown: 0,
             audio_events: Vec::new(),
             background_scroll: crate::fixed::Q12_4::ZERO,
@@ -68,6 +73,8 @@ impl Default for World {
             growth_level: 0,
             recovery_stock: 0,
             invincible_frames: 0,
+            ranking: super::RankingTable::load_default(),
+            name_entry: super::NameEntryState::default(),
         }
     }
 }
@@ -76,6 +83,7 @@ impl World {
     pub fn begin_name_entry(&mut self) {
         self.frame = 0;
         self.state = GameState::NameEntry;
+        self.name_entry.reset();
     }
 
     fn character_hitbox(
@@ -113,6 +121,7 @@ impl World {
         self.player_bullets.clear();
         self.enemy_bullets.clear();
         self.items.clear();
+        self.effects.clear();
         self.shot_cooldown = 0;
         self.audio_events.clear();
         self.background_scroll = crate::fixed::Q12_4::ZERO;
@@ -122,14 +131,25 @@ impl World {
         self.invincible_frames = 0;
     }
 
-    pub fn spawn_scheduled_objects(&mut self) {
-        if self.stage_id != 1 {
-            return;
-        }
+    pub fn advance_to_next_stage(&mut self) {
+        self.frame = 0;
+        self.hp = PLAYER_MAX_HP;
+        self.enemies.clear();
+        self.player_bullets.clear();
+        self.enemy_bullets.clear();
+        self.items.clear();
+        self.effects.clear();
+        self.shot_cooldown = 0;
+        self.audio_events.clear();
+        self.background_scroll = crate::fixed::Q12_4::ZERO;
+        self.player_x = crate::fixed::Q12_4(5_120);
+        self.player_y = crate::fixed::Q12_4(4_480);
+        self.invincible_frames = 0;
+    }
 
-        let scheduled_objects: Vec<ScheduleData> = STAGE_ONE_SCHEDULE
-            .iter()
-            .filter(|entry| entry.stage_id == self.stage_id && entry.frame == self.frame)
+    pub fn spawn_scheduled_objects(&mut self) {
+        let scheduled_objects: Vec<ScheduleData> = stage_schedule(self.stage_id)
+            .filter(|entry| entry.frame == self.frame)
             .copied()
             .collect();
         for schedule in scheduled_objects {
@@ -142,11 +162,14 @@ impl World {
 
     pub fn update_enemy_movement(&mut self) {
         self.enemies.for_each_active_mut(|enemy| {
-            match ORBIT_DATA
+            let orbit_opt = ORBIT_DATA
                 .iter()
-                .find(|orbit| orbit.orbit_id == enemy.orbit_id)
-            {
-                Some(orbit) if orbit.orbit_type == OrbitType::Circle => {
+                .find(|orbit| orbit.orbit_id == enemy.orbit_id);
+            match orbit_opt {
+                Some(orbit)
+                    if orbit.orbit_type == OrbitType::Circle
+                        && enemy.orbit_frame <= orbit.duration_frames =>
+                {
                     let points = [
                         (48, 0),
                         (44, 18),
@@ -191,8 +214,24 @@ impl World {
                         t,
                     );
                 }
+                Some(orbit)
+                    if orbit.orbit_type == OrbitType::Straight
+                        && enemy.orbit_frame <= orbit.duration_frames =>
+                {
+                    enemy.x += enemy.velocity_x;
+                    enemy.y += enemy.velocity_y;
+                }
                 Some(orbit) if enemy.orbit_frame > orbit.duration_frames => {
                     enemy.y += self.background_speed;
+                    let (half_w, half_h) = character_trait(enemy.character_id)
+                        .map_or((256, 256), |t| (t.hitbox_width, t.hitbox_height));
+                    if enemy.x.raw() + half_w < 0
+                        || enemy.x.raw() - half_w >= 10_240
+                        || enemy.y.raw() + half_h < 0
+                        || enemy.y.raw() - half_h >= 5_120
+                    {
+                        enemy.active = false;
+                    }
                 }
                 _ => {
                     enemy.x += enemy.velocity_x;
@@ -204,17 +243,17 @@ impl World {
         let pending: Vec<crate::runtime::ObjectState> = {
             let mut bullets = Vec::new();
             self.enemies.for_each_active_mut(|enemy| {
-                if let Some(pattern) = fire_pattern(enemy.fire_pattern_id) {
-                    if enemy.orbit_frame == pattern.fire_frame {
-                        bullets.push(crate::runtime::ObjectState {
-                            character_id: pattern.bullet_character_id,
-                            x: enemy.x + pattern.spawn_offset_x,
-                            y: enemy.y + pattern.spawn_offset_y,
-                            velocity_x: pattern.velocity().0,
-                            velocity_y: pattern.velocity().1,
-                            ..Default::default()
-                        });
-                    }
+                if let Some(pattern) = fire_pattern(enemy.fire_pattern_id)
+                    && enemy.orbit_frame == pattern.fire_frame
+                {
+                    bullets.push(crate::runtime::ObjectState {
+                        character_id: pattern.bullet_character_id,
+                        x: enemy.x + pattern.spawn_offset_x,
+                        y: enemy.y + pattern.spawn_offset_y,
+                        velocity_x: pattern.velocity().0,
+                        velocity_y: pattern.velocity().1,
+                        ..Default::default()
+                    });
                 }
             });
             bullets
@@ -307,7 +346,25 @@ impl World {
             } else {
                 self.recovery_stock = self.recovery_stock.saturating_add(collected).min(9);
             }
+            let _ = self.effects.spawn(EffectState {
+                effect_id: 1, // growth/item effect
+                x: self.player_x,
+                y: self.player_y,
+                frame: 0,
+                max_frames: 20,
+                size: 24,
+                ..Default::default()
+            });
         }
+    }
+
+    pub fn update_effects(&mut self) {
+        self.effects.for_each_active_mut(|effect| {
+            effect.frame = effect.frame.saturating_add(1);
+            if effect.frame >= effect.max_frames {
+                effect.active = false;
+            }
+        });
     }
 
     fn clamp_q12(value: crate::fixed::Q12_4, minimum: i16, maximum: i16) -> crate::fixed::Q12_4 {
@@ -372,6 +429,25 @@ impl World {
                         if enemy.hp == 0 {
                             if let Some(trait_data) = character_trait(enemy.character_id) {
                                 self.score = self.score.saturating_add(trait_data.score);
+                                if trait_data.destroy_effect_id != 0 {
+                                    let _ = self.effects.spawn(EffectState {
+                                        effect_id: trait_data.destroy_effect_id,
+                                        x: enemy.x,
+                                        y: enemy.y,
+                                        frame: 0,
+                                        max_frames: if trait_data.destroy_effect_id == 2 {
+                                            60
+                                        } else {
+                                            20
+                                        },
+                                        size: if trait_data.destroy_effect_id == 2 {
+                                            64
+                                        } else {
+                                            24
+                                        },
+                                        ..Default::default()
+                                    });
+                                }
                                 if trait_data.character_type == CharacterType::Boss {
                                     self.state = GameState::StageClear;
                                     self.frame = 0;
@@ -390,10 +466,8 @@ impl World {
                     }
                 }
             }
-            if consumed {
-                if let Some(bullet) = self.player_bullets.get_mut(bullet_index) {
-                    bullet.active = false;
-                }
+            if consumed && let Some(bullet) = self.player_bullets.get_mut(bullet_index) {
+                bullet.active = false;
             }
         }
     }
@@ -452,7 +526,11 @@ impl World {
             if self.hp == 0 {
                 self.lives = self.lives.saturating_sub(1);
                 if self.lives == 0 {
-                    self.state = GameState::GameOver;
+                    if self.ranking.is_high_score(self.score) {
+                        self.begin_name_entry();
+                    } else {
+                        self.state = GameState::GameOver;
+                    }
                 } else {
                     self.reset_stage();
                     self.state = GameState::StageIntro;

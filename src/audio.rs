@@ -1,9 +1,10 @@
 use std::{collections::HashMap, fs, path::Path};
 
-use rodio::{Decoder, OutputStream, OutputStreamBuilder, Sink};
+use rodio::{Decoder, OutputStream, OutputStreamBuilder, Sink, Source};
 use std::io::Cursor;
 
 #[derive(Clone, Copy, Debug)]
+#[allow(dead_code)]
 pub enum AudioEvent {
     Fire,
     Hit,
@@ -28,6 +29,7 @@ impl AudioEvent {
     }
 }
 
+#[allow(dead_code)]
 pub trait PlatformAudio {
     fn play(&mut self, event: AudioEvent);
 }
@@ -78,6 +80,7 @@ impl SoundCatalog {
             .map(Vec::as_slice)
     }
 
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.sounds.len()
     }
@@ -90,6 +93,8 @@ impl SoundCatalog {
 pub struct RodioAudio {
     _stream: OutputStream,
     sounds: SoundCatalog,
+    bgm_sink: Option<Sink>,
+    bgm_cache: BgmCache,
 }
 
 impl RodioAudio {
@@ -98,6 +103,8 @@ impl RodioAudio {
         Ok(Self {
             _stream: stream,
             sounds,
+            bgm_sink: None,
+            bgm_cache: BgmCache::default(),
         })
     }
 
@@ -116,6 +123,46 @@ impl RodioAudio {
 
     pub fn play_event(&self, event: AudioEvent) -> bool {
         event.path().is_some_and(|path| self.play_sound_path(path))
+    }
+
+    pub fn play_stage_bgm(&mut self, stage_id: u8) -> bool {
+        if self.bgm_cache.stage_id == Some(stage_id) && self.bgm_sink.is_some() {
+            return true;
+        }
+
+        let bgm_path = format!("assets/audio/stage{:02}_bgm.wav", stage_id);
+        let fallback_path = "assets/audio/stage01_bgm.wav";
+
+        if !self.bgm_cache.load_stage(stage_id, &bgm_path)
+            && !self.bgm_cache.load_stage(stage_id, fallback_path)
+        {
+            self.stop_bgm();
+            return false;
+        }
+
+        let Some(bytes) = &self.bgm_cache.data else {
+            return false;
+        };
+        let Ok(source) = Decoder::try_from(Cursor::new(bytes.clone())) else {
+            return false;
+        };
+
+        let sink = Sink::connect_new(self._stream.mixer());
+        sink.append(source.repeat_infinite());
+        self.bgm_sink = Some(sink);
+        true
+    }
+
+    pub fn stop_bgm(&mut self) {
+        if let Some(sink) = self.bgm_sink.take() {
+            sink.stop();
+        }
+        self.bgm_cache.unload();
+    }
+
+    #[allow(dead_code)]
+    pub fn is_bgm_playing(&self) -> bool {
+        self.bgm_sink.is_some()
     }
 }
 

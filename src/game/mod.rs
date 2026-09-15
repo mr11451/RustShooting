@@ -483,6 +483,61 @@ mod tests {
     }
 
     #[test]
+    fn player_and_enemy_bullets_are_destroyed_on_collision() {
+        let mut world = World {
+            state: GameState::Playing,
+            ..World::default()
+        };
+        let x = world.player_x;
+        let y = world.player_y;
+        world.player_bullets.spawn(crate::runtime::ObjectState {
+            character_id: 1,
+            x,
+            y,
+            ..Default::default()
+        });
+        world.enemy_bullets.spawn(crate::runtime::ObjectState {
+            character_id: 6,
+            x,
+            y,
+            ..Default::default()
+        });
+
+        world.resolve_collisions();
+
+        assert_eq!(world.player_bullets.active_count(), 0);
+        assert_eq!(world.enemy_bullets.active_count(), 0);
+    }
+
+    #[test]
+    fn player_and_enemy_bullets_are_destroyed_when_crossing_between_frames() {
+        let mut world = World {
+            state: GameState::Playing,
+            ..World::default()
+        };
+        world.player_bullets.spawn(crate::runtime::ObjectState {
+            character_id: 1,
+            x: crate::fixed::Q12_4(2_000),
+            y: crate::fixed::Q12_4(1_000),
+            velocity_y: crate::fixed::Q12_4(-64),
+            ..Default::default()
+        });
+        world.enemy_bullets.spawn(crate::runtime::ObjectState {
+            character_id: 6,
+            x: crate::fixed::Q12_4(2_000),
+            y: crate::fixed::Q12_4(936),
+            velocity_y: crate::fixed::Q12_4(64),
+            ..Default::default()
+        });
+
+        world.update_projectiles(false, false);
+        world.resolve_collisions();
+
+        assert_eq!(world.player_bullets.active_count(), 0);
+        assert_eq!(world.enemy_bullets.active_count(), 0);
+    }
+
+    #[test]
     fn recovery_stock_restores_25_hp_after_damage() {
         let mut world = World {
             state: GameState::Playing,

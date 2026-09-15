@@ -24,6 +24,8 @@ struct CollisionSnapshot {
     character_id: u16,
     x: crate::fixed::Q12_4,
     y: crate::fixed::Q12_4,
+    velocity_x: crate::fixed::Q12_4,
+    velocity_y: crate::fixed::Q12_4,
 }
 
 #[derive(Debug)]
@@ -123,8 +125,8 @@ impl World {
         Some(Hitbox {
             x,
             y,
-            half_width: crate::fixed::Q12_4(bullet_data.hitbox_width),
-            half_height: crate::fixed::Q12_4(bullet_data.hitbox_height),
+            half_width: crate::fixed::Q12_4(bullet_data.hitbox_width.saturating_mul(16)),
+            half_height: crate::fixed::Q12_4(bullet_data.hitbox_height.saturating_mul(16)),
         })
     }
 
@@ -450,6 +452,8 @@ impl World {
                     character_id: enemy.character_id,
                     x: enemy.x,
                     y: enemy.y,
+                    velocity_x: enemy.velocity_x,
+                    velocity_y: enemy.velocity_y,
                 })
             })
             .collect();
@@ -535,6 +539,54 @@ impl World {
         }
     }
 
+    fn resolve_bullet_collisions(&mut self) {
+        let player_bullets = self.collision_snapshots(&self.player_bullets);
+        let enemy_bullets = self.collision_snapshots(&self.enemy_bullets);
+        let mut collided_player_bullets = Vec::new();
+        let mut collided_enemy_bullets = Vec::new();
+
+        for player_bullet in &player_bullets {
+            for enemy_bullet in &enemy_bullets {
+                if Self::bullet_hitbox(player_bullet.character_id, player_bullet.x, player_bullet.y)
+                    .zip(Self::bullet_hitbox(
+                        enemy_bullet.character_id,
+                        enemy_bullet.x,
+                        enemy_bullet.y,
+                    ))
+                    .is_some_and(|(mut player_box, enemy_box)| {
+                        let relative_velocity_x = (i32::from(player_bullet.velocity_x.raw())
+                            - i32::from(enemy_bullet.velocity_x.raw()))
+                        .unsigned_abs()
+                        .min(u32::from(i16::MAX as u16))
+                            as i16;
+                        let relative_velocity_y = (i32::from(player_bullet.velocity_y.raw())
+                            - i32::from(enemy_bullet.velocity_y.raw()))
+                        .unsigned_abs()
+                        .min(u32::from(i16::MAX as u16))
+                            as i16;
+                        player_box.half_width += crate::fixed::Q12_4(relative_velocity_x);
+                        player_box.half_height += crate::fixed::Q12_4(relative_velocity_y);
+                        overlaps(player_box, enemy_box)
+                    })
+                {
+                    collided_player_bullets.push(player_bullet.index);
+                    collided_enemy_bullets.push(enemy_bullet.index);
+                }
+            }
+        }
+
+        for index in collided_player_bullets {
+            if let Some(bullet) = self.player_bullets.get_mut(index) {
+                bullet.active = false;
+            }
+        }
+        for index in collided_enemy_bullets {
+            if let Some(bullet) = self.enemy_bullets.get_mut(index) {
+                bullet.active = false;
+            }
+        }
+    }
+
     pub fn resolve_player_hits(&mut self) {
         if self.invincible_frames > 0 {
             self.invincible_frames -= 1;
@@ -603,6 +655,7 @@ impl World {
     }
 
     pub fn resolve_collisions(&mut self) {
+        self.resolve_bullet_collisions();
         self.resolve_player_bullet_hits();
         if self.state == GameState::Playing {
             self.resolve_player_hits();
@@ -621,6 +674,8 @@ impl World {
                     character_id: object.character_id,
                     x: object.x,
                     y: object.y,
+                    velocity_x: object.velocity_x,
+                    velocity_y: object.velocity_y,
                 })
             })
             .collect()

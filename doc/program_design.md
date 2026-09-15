@@ -13,10 +13,19 @@
 - HUD、BGM/SE、ランキング保存、名前入力、ステージ遷移を実装
 - 自弾はグループIDで管理し、レベル別の同時グループ数は `4/6/8/10/12`
 - グループ内の横並び弾数は `1/2/3/4/5`
+- 自弾のグループ数、グループ内弾数、弾種は`PlayerGrowthData`特性テーブルから参照
+- 自弾の速度と各弾の射出方向も`PlayerGrowthData`特性テーブルから参照
+- 敵弾の速度は発射パターンデータ自体を1.25倍に設定し、コード側では倍率変更しない
 - 押しっぱなしは0.5秒間隔で連射、押下トリガーは間隔を無視して発射
 - キーボード、ゲームパッド（gilrsの十字キー・左スティック・South・Start）に対応
 - `P`キーまたはゲームパッドの`Start`でプレイ中のポーズを切り替え
+- `Esc`入力時はゲームオーバーへ遷移せず、ステージ状態をリセットしてタイトルへ戻る
+- ポーズ中は中央に大きな`PAUSE`を点滅表示
+- ステージクリア演出中はキャラクター、ボス、アイテム、弾を非表示
+- HUD右下に`S:01`形式のステージ番号を表示
+- ステージ6クリア後、スコア更新があれば名前入力完了後に、更新がなければEnding表示後にステージ1から再開
 - HP非満タン時の成長アイテムはレベルアップせず、1個あたり25HPを回復
+- 被弾時は回復ストックをまずHP回復に使い、残ったストックを1個1レベルの成長回復に使う
 - `cargo test`、`cargo check`、`cargo clippy --all-targets --all-features -- -D warnings`を通過
 
 ## 1. 方針
@@ -259,17 +268,18 @@ enum GameState {
 ```text
 Title --入力--> StageIntro
 Title --30秒無入力--> Demo
-Playing --ハイスコアトップ10--> NameEntry --30秒経過--> Demo
+Playing --ハイスコアトップ10--> NameEntry --入力完了/30秒経過--> Stage1 StageIntro
 Demo --入力--> StageIntro
 StageIntro --90フレーム--> Playing
 Playing --ボス撃破--> StageClear
 StageClear --90フレーム、ステージ6以外--> StageIntro
 StageClear --90フレーム、ステージ6--> Ending
 Playing --被弾後もHP0、残機0--> GameOver
-GameOver --30秒--> Title
+GameOver --900フレーム--> Title
+Esc --入力--> Title
 ```
 
-`StageIntro` と `StageClear` では敵の生成とステージスケジュールのフレーム進行を停止する。
+`StageIntro` と `StageClear` では敵の生成とステージスケジュールのフレーム進行を停止する。`StageClear`中はスプライトを描画せず、クリア表示とHUDのみを表示する。`Ending`でスコア更新がない場合もステージ1の`StageIntro`へ戻る。
 
 ## 5. 定義データ
 

@@ -11,13 +11,6 @@ pub const PLAYER_INITIAL_Y_Q12: Q12_4 = Q12_4(560 * 16); // 8_960 (bottom)
 pub const BOSS_ORBIT_CENTER_X_Q12: Q12_4 = Q12_4(SCREEN_WIDTH_Q12.raw() / 2);
 pub const BOSS_ORBIT_CENTER_Y_Q12: Q12_4 = Q12_4(220 * 16);
 pub const BOSS_ORBIT_RADIUS_Q12: Q12_4 = Q12_4(96 * 16);
-pub const PLAYER_BULLET_SPEED_BY_LEVEL_Q12: [Q12_4; 5] = [
-    Q12_4(-64),
-    Q12_4(-67),
-    Q12_4(-70),
-    Q12_4(-74),
-    Q12_4(-77),
-];
 pub const HUD_HEIGHT: f32 = 16.0;
 pub const HUD_Y: f32 = LOGICAL_HEIGHT - HUD_HEIGHT; // 624.0
 
@@ -40,24 +33,42 @@ pub enum ObjectType {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[allow(dead_code)]
-pub enum Direction16 {
+pub enum Direction32 {
     North,
+    NorthByEast,
     NorthNorthEast,
+    NorthEastByNorth,
     NorthEast,
+    NorthEastByEast,
     EastNorthEast,
+    EastByNorth,
     East,
+    EastBySouth,
     EastSouthEast,
+    SouthEastByEast,
     SouthEast,
+    SouthEastBySouth,
     SouthSouthEast,
+    SouthByEast,
     South,
+    SouthByWest,
     SouthSouthWest,
+    SouthWestBySouth,
     SouthWest,
+    SouthWestByWest,
     WestSouthWest,
+    WestBySouth,
     West,
+    WestByNorth,
     WestNorthWest,
+    NorthWestByWest,
     NorthWest,
+    NorthWestByNorth,
     NorthNorthWest,
+    NorthByWest,
 }
+
+pub use Direction32 as Direction16;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OrbitType {
@@ -179,6 +190,132 @@ pub struct BulletCharacterData {
     pub player_damage: u16,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PlayerGrowthData {
+    pub growth_level: u8,
+    pub max_bullet_groups: u8,
+    pub bullets_per_group: u8,
+    pub bullet_character_id: u16,
+    pub speed: Q12_4,
+    pub directions: &'static [Direction16],
+}
+
+const PLAYER_DIRECTIONS_LEVEL_0: &[Direction16] = &[Direction16::North];
+const PLAYER_DIRECTIONS_LEVEL_1: &[Direction16] = &[Direction16::North, Direction16::North];
+const PLAYER_DIRECTIONS_LEVEL_2: &[Direction16] = &[
+    Direction16::NorthByWest,
+    Direction16::North,
+    Direction16::NorthByEast,
+];
+const PLAYER_DIRECTIONS_LEVEL_3: &[Direction16] = &[
+    Direction16::NorthByWest,
+    Direction16::North,
+    Direction16::North,
+    Direction16::NorthByEast,
+];
+const PLAYER_DIRECTIONS_LEVEL_4: &[Direction16] = &[
+    Direction16::NorthByWest,
+    Direction16::North,
+    Direction16::North,
+    Direction16::North,
+    Direction16::NorthByEast,
+];
+
+pub const PLAYER_GROWTH_DATA: &[PlayerGrowthData] = &[
+    PlayerGrowthData {
+        growth_level: 0,
+        max_bullet_groups: 4,
+        bullets_per_group: 1,
+        bullet_character_id: 1,
+        speed: Q12_4(64),
+        directions: PLAYER_DIRECTIONS_LEVEL_0,
+    },
+    PlayerGrowthData {
+        growth_level: 1,
+        max_bullet_groups: 6,
+        bullets_per_group: 2,
+        bullet_character_id: 1,
+        speed: Q12_4(67),
+        directions: PLAYER_DIRECTIONS_LEVEL_1,
+    },
+    PlayerGrowthData {
+        growth_level: 2,
+        max_bullet_groups: 8,
+        bullets_per_group: 3,
+        bullet_character_id: 1,
+        speed: Q12_4(70),
+        directions: PLAYER_DIRECTIONS_LEVEL_2,
+    },
+    PlayerGrowthData {
+        growth_level: 3,
+        max_bullet_groups: 10,
+        bullets_per_group: 4,
+        bullet_character_id: 1,
+        speed: Q12_4(74),
+        directions: PLAYER_DIRECTIONS_LEVEL_3,
+    },
+    PlayerGrowthData {
+        growth_level: 4,
+        max_bullet_groups: 12,
+        bullets_per_group: 5,
+        bullet_character_id: 1,
+        speed: Q12_4(77),
+        directions: PLAYER_DIRECTIONS_LEVEL_4,
+    },
+];
+
+pub fn player_growth_data(growth_level: u8) -> &'static PlayerGrowthData {
+    &PLAYER_GROWTH_DATA[usize::from(growth_level.min(4))]
+}
+
+pub fn direction_velocity(direction: Direction16, speed: Q12_4) -> (Q12_4, Q12_4) {
+    let index = direction_index(direction);
+    let angle = (index as f32) * std::f32::consts::TAU / 32.0;
+    let speed = f32::from(speed.raw());
+    (
+        Q12_4((angle.sin() * speed).round() as i16),
+        Q12_4((-angle.cos() * speed).round() as i16),
+    )
+}
+
+fn direction_index(direction: Direction16) -> u8 {
+    use Direction16::*;
+    match direction {
+        North => 0,
+        NorthByEast => 1,
+        NorthNorthEast => 2,
+        NorthEastByNorth => 3,
+        NorthEast => 4,
+        NorthEastByEast => 5,
+        EastNorthEast => 6,
+        EastByNorth => 7,
+        East => 8,
+        EastBySouth => 9,
+        EastSouthEast => 10,
+        SouthEastByEast => 11,
+        SouthEast => 12,
+        SouthEastBySouth => 13,
+        SouthSouthEast => 14,
+        SouthByEast => 15,
+        South => 16,
+        SouthByWest => 17,
+        SouthSouthWest => 18,
+        SouthWestBySouth => 19,
+        SouthWest => 20,
+        SouthWestByWest => 21,
+        WestSouthWest => 22,
+        WestBySouth => 23,
+        West => 24,
+        WestByNorth => 25,
+        WestNorthWest => 26,
+        NorthWestByWest => 27,
+        NorthWest => 28,
+        NorthWestByNorth => 29,
+        NorthNorthWest => 30,
+        NorthByWest => 31,
+    }
+}
+
 pub const BULLET_CHARACTER_DATA: &[BulletCharacterData] = &[
     BulletCharacterData {
         bullet_character_id: 1,
@@ -246,9 +383,9 @@ pub const FIRE_PATTERNS: &[FirePatternData] = &[
         spawn_offset_y: Q12_4::ZERO,
         bullet_character_id: 2,
         direction: Direction16::South,
-        speed: Q12_4(16),
+        speed: Q12_4(20),
         bullet_velocity_x: Q12_4::ZERO,
-        bullet_velocity_y: Q12_4(16),
+        bullet_velocity_y: Q12_4(20),
     },
     FirePatternData {
         fire_pattern_id: 2,
@@ -257,9 +394,9 @@ pub const FIRE_PATTERNS: &[FirePatternData] = &[
         spawn_offset_y: Q12_4::ZERO,
         bullet_character_id: 2,
         direction: Direction16::SouthEast,
-        speed: Q12_4(16),
-        bullet_velocity_x: Q12_4(11),
-        bullet_velocity_y: Q12_4(11),
+        speed: Q12_4(20),
+        bullet_velocity_x: Q12_4(14),
+        bullet_velocity_y: Q12_4(14),
     },
     FirePatternData {
         fire_pattern_id: 3,
@@ -268,9 +405,9 @@ pub const FIRE_PATTERNS: &[FirePatternData] = &[
         spawn_offset_y: Q12_4::ZERO,
         bullet_character_id: 2,
         direction: Direction16::SouthWest,
-        speed: Q12_4(16),
-        bullet_velocity_x: Q12_4(-11),
-        bullet_velocity_y: Q12_4(11),
+        speed: Q12_4(20),
+        bullet_velocity_x: Q12_4(-14),
+        bullet_velocity_y: Q12_4(14),
     },
     FirePatternData {
         fire_pattern_id: 4,
@@ -279,9 +416,9 @@ pub const FIRE_PATTERNS: &[FirePatternData] = &[
         spawn_offset_y: Q12_4::ZERO,
         bullet_character_id: 5,
         direction: Direction16::South,
-        speed: Q12_4(24),
+        speed: Q12_4(30),
         bullet_velocity_x: Q12_4::ZERO,
-        bullet_velocity_y: Q12_4(24),
+        bullet_velocity_y: Q12_4(30),
     },
     FirePatternData {
         fire_pattern_id: 10,
@@ -290,9 +427,9 @@ pub const FIRE_PATTERNS: &[FirePatternData] = &[
         spawn_offset_y: Q12_4(256),
         bullet_character_id: 3,
         direction: Direction16::South,
-        speed: Q12_4(16),
+        speed: Q12_4(20),
         bullet_velocity_x: Q12_4::ZERO,
-        bullet_velocity_y: Q12_4(16),
+        bullet_velocity_y: Q12_4(20),
     },
     FirePatternData {
         fire_pattern_id: 11,
@@ -301,9 +438,9 @@ pub const FIRE_PATTERNS: &[FirePatternData] = &[
         spawn_offset_y: Q12_4(256),
         bullet_character_id: 3,
         direction: Direction16::SouthEast,
-        speed: Q12_4(16),
-        bullet_velocity_x: Q12_4(11),
-        bullet_velocity_y: Q12_4(11),
+        speed: Q12_4(20),
+        bullet_velocity_x: Q12_4(14),
+        bullet_velocity_y: Q12_4(14),
     },
     FirePatternData {
         fire_pattern_id: 12,
@@ -312,9 +449,9 @@ pub const FIRE_PATTERNS: &[FirePatternData] = &[
         spawn_offset_y: Q12_4(256),
         bullet_character_id: 5,
         direction: Direction16::SouthWest,
-        speed: Q12_4(20),
-        bullet_velocity_x: Q12_4(-14),
-        bullet_velocity_y: Q12_4(14),
+        speed: Q12_4(25),
+        bullet_velocity_x: Q12_4(-18),
+        bullet_velocity_y: Q12_4(18),
     },
     FirePatternData {
         fire_pattern_id: 13,
@@ -323,9 +460,9 @@ pub const FIRE_PATTERNS: &[FirePatternData] = &[
         spawn_offset_y: Q12_4(384),
         bullet_character_id: 3,
         direction: Direction16::South,
-        speed: Q12_4(20),
+        speed: Q12_4(25),
         bullet_velocity_x: Q12_4::ZERO,
-        bullet_velocity_y: Q12_4(20),
+        bullet_velocity_y: Q12_4(25),
     },
     FirePatternData {
         fire_pattern_id: 14,
@@ -334,9 +471,9 @@ pub const FIRE_PATTERNS: &[FirePatternData] = &[
         spawn_offset_y: Q12_4(384),
         bullet_character_id: 5,
         direction: Direction16::South,
-        speed: Q12_4(24),
+        speed: Q12_4(30),
         bullet_velocity_x: Q12_4::ZERO,
-        bullet_velocity_y: Q12_4(24),
+        bullet_velocity_y: Q12_4(30),
     },
     FirePatternData {
         fire_pattern_id: 15,
@@ -345,9 +482,9 @@ pub const FIRE_PATTERNS: &[FirePatternData] = &[
         spawn_offset_y: Q12_4(512),
         bullet_character_id: 3,
         direction: Direction16::South,
-        speed: Q12_4(24),
+        speed: Q12_4(30),
         bullet_velocity_x: Q12_4::ZERO,
-        bullet_velocity_y: Q12_4(24),
+        bullet_velocity_y: Q12_4(30),
     },
 ];
 
@@ -1242,7 +1379,7 @@ pub const STAGE_SCHEDULES: &[ScheduleData] = &[
         spawn_y: Q12_4(-512),
         object_type: ObjectType::Boss,
         character_id: 105,
-        orbit_id: 3,
+        orbit_id: 10,
         difficulty: 4,
         fire_pattern_id: 15,
         background_speed: Q12_4(24),
@@ -1385,7 +1522,7 @@ pub const ORBIT_DATA: &[OrbitData] = &[
         orbit_id: 2,
         orbit_type: OrbitType::Circle,
         direction: Direction16::East,
-        speed: Q12_4(16),
+        speed: Q12_4::ONE,
         radius: Q12_4(768),
         control_point_1: (Q12_4::ZERO, Q12_4::ZERO),
         control_point_2: (Q12_4::ZERO, Q12_4::ZERO),
@@ -1504,7 +1641,7 @@ pub const ORBIT_DATA: &[OrbitData] = &[
         orbit_id: 9,
         orbit_type: OrbitType::Circle,
         direction: Direction16::East,
-        speed: Q12_4::ZERO,
+        speed: Q12_4::ONE,
         radius: BOSS_ORBIT_RADIUS_Q12,
         control_point_1: (Q12_4::ZERO, Q12_4::ZERO),
         control_point_2: (Q12_4::ZERO, Q12_4::ZERO),
@@ -1512,10 +1649,27 @@ pub const ORBIT_DATA: &[OrbitData] = &[
         target_position: (Q12_4::ZERO, Q12_4::ZERO),
         start_angle: Some(0),
         end_angle: None,
-        duration_frames: 60,
+        duration_frames: u32::MAX,
         acceleration: Q12_4::ZERO,
         next_orbit_id: 9,
         rotation: 1,
+    },
+    OrbitData {
+        orbit_id: 10,
+        orbit_type: OrbitType::Bezier,
+        direction: Direction16::South,
+        speed: Q12_4(16),
+        radius: Q12_4::ZERO,
+        control_point_1: (Q12_4::ZERO, Q12_4::ZERO),
+        control_point_2: (Q12_4::ZERO, Q12_4(1_600)),
+        control_point_end: (Q12_4::ZERO, Q12_4(3_000)),
+        target_position: (Q12_4::ZERO, Q12_4::ZERO),
+        start_angle: None,
+        end_angle: None,
+        duration_frames: 900,
+        acceleration: Q12_4::ZERO,
+        next_orbit_id: 8,
+        rotation: 0,
     },
 ];
 
@@ -1615,8 +1769,31 @@ mod tests {
     }
 
     #[test]
+    fn player_growth_data_defines_bullet_groups_and_types() {
+        let level_zero = player_growth_data(0);
+        let level_four = player_growth_data(4);
+
+        assert_eq!(level_zero.max_bullet_groups, 4);
+        assert_eq!(level_zero.bullets_per_group, 1);
+        assert_eq!(level_zero.bullet_character_id, 1);
+        assert_eq!(level_four.max_bullet_groups, 12);
+        assert_eq!(level_four.bullets_per_group, 5);
+        assert_eq!(level_four.bullet_character_id, 1);
+        assert_eq!(level_four.speed, Q12_4(77));
+        assert_eq!(level_four.directions.len(), 5);
+        assert_eq!(level_four.directions[2], Direction16::North);
+    }
+
+    #[test]
     fn fire_pattern_direction_converts_to_velocity() {
         let pattern = fire_pattern(1).unwrap();
-        assert_eq!(pattern.velocity(), (Q12_4::ZERO, Q12_4(16)));
+        assert_eq!(pattern.velocity(), (Q12_4::ZERO, Q12_4(20)));
+    }
+
+    #[test]
+    fn direction_velocity_supports_thirty_two_directions() {
+        let (x, y) = direction_velocity(Direction16::NorthByEast, Q12_4(64));
+        assert!(x.raw() > 0);
+        assert!(y.raw() < 0);
     }
 }

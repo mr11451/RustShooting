@@ -29,6 +29,7 @@ pub struct App {
     audio: Option<RodioAudio>,
     gilrs: Option<Gilrs>,
     paused: bool,
+    pause_frame: u32,
 }
 
 impl ApplicationHandler for App {
@@ -92,6 +93,9 @@ impl ApplicationHandler for App {
                 let now = Instant::now();
                 if self.next_frame.is_none_or(|deadline| now >= deadline) {
                     self.poll_gamepad();
+                    if self.paused {
+                        self.pause_frame = self.pause_frame.saturating_add(1);
+                    }
                     let prev_state = self.world.state;
                     if !self.paused {
                         game::update(&mut self.world, self.input);
@@ -127,7 +131,7 @@ impl ApplicationHandler for App {
                     self.next_frame = Some(now + frame_duration());
                 }
                 if let Some(renderer) = &mut self.renderer {
-                    match renderer.render(&self.world) {
+                    match renderer.render(&self.world, self.paused, self.pause_frame) {
                         Ok(()) => {}
                         Err(wgpu::SurfaceError::Lost) => {
                             if let Some(window) = &self.window {
@@ -263,6 +267,7 @@ impl App {
     fn toggle_pause(&mut self) {
         if self.world.state == game::GameState::Playing {
             self.paused = !self.paused;
+            self.pause_frame = 0;
         }
     }
 }

@@ -2,9 +2,9 @@ use crate::{
     audio::AudioEvent,
     collision::{Hitbox, overlaps},
     data::{
-        CharacterType, ORBIT_DATA, ObjectType, OrbitType, PLAYER_BULLET_SPEED_BY_LEVEL_Q12,
-        PLAYER_INITIAL_X_Q12, PLAYER_INITIAL_Y_Q12, SCREEN_HEIGHT_Q12, SCREEN_WIDTH_Q12,
-        ScheduleData, bullet_character, character_trait, fire_pattern, stage_schedule,
+        CharacterType, ORBIT_DATA, ObjectType, OrbitType, PLAYER_INITIAL_X_Q12,
+        PLAYER_INITIAL_Y_Q12, SCREEN_HEIGHT_Q12, SCREEN_WIDTH_Q12, ScheduleData, bullet_character,
+        character_trait, direction_velocity, fire_pattern, player_growth_data, stage_schedule,
     },
     runtime::{
         ENEMY_BULLET_CAPACITY, ENEMY_CAPACITY, EffectPool, EffectState, ITEM_CAPACITY, ObjectPool,
@@ -153,6 +153,15 @@ impl World {
         self.invincible_frames = 0;
     }
 
+    pub fn restart_from_stage_one(&mut self) {
+        self.stage_id = 1;
+        self.lives = 3;
+        self.score = 0;
+        self.recovery_stock = 0;
+        self.reset_stage();
+        self.state = GameState::StageIntro;
+    }
+
     pub fn advance_to_next_stage(&mut self) {
         self.frame = 0;
         self.hp = PLAYER_MAX_HP;
@@ -197,6 +206,14 @@ impl World {
                         if !preserve_origin {
                             enemy.orbit_origin_x = enemy.x;
                             enemy.orbit_origin_y = enemy.y;
+                            if let Some(next_orbit) = ORBIT_DATA
+                                .iter()
+                                .find(|next| next.orbit_id == enemy.orbit_id)
+                                && next_orbit.orbit_type == OrbitType::Circle
+                            {
+                                enemy.orbit_center_x = enemy.x - next_orbit.radius;
+                                enemy.orbit_center_y = enemy.y;
+                            }
                         }
                         return;
                     }
@@ -219,29 +236,14 @@ impl World {
                     enemy.y = lerp_component(enemy.orbit_origin_y, orbit.target_position.1, t);
                 }
                 Some(orbit) if orbit.orbit_type == OrbitType::Circle => {
-                    let points = [
-                        (48, 0),
-                        (44, 18),
-                        (34, 34),
-                        (18, 44),
-                        (0, 48),
-                        (-18, 44),
-                        (-34, 34),
-                        (-44, 18),
-                        (-48, 0),
-                        (-44, -18),
-                        (-34, -34),
-                        (-18, -44),
-                        (0, -48),
-                        (18, -44),
-                        (34, -34),
-                        (44, -18),
-                    ];
-                    let (x, y) = points[(enemy.orbit_frame as usize) % points.len()];
-                    enemy.x = enemy.orbit_origin_x
-                        + crate::fixed::Q12_4((x * i32::from(orbit.radius.raw()) / 48) as i16);
-                    enemy.y = enemy.orbit_origin_y
-                        + crate::fixed::Q12_4((y * i32::from(orbit.radius.raw()) / 48) as i16);
+                    let radius = f32::from(orbit.radius.raw()).abs().max(1.0);
+                    let arc_speed = f32::from(orbit.speed.raw()).abs();
+                    let direction = if orbit.rotation < 0 { -1.0 } else { 1.0 };
+                    let angle = direction * (enemy.orbit_frame as f32 * arc_speed / radius);
+                    let x = angle.cos() * radius;
+                    let y = angle.sin() * radius;
+                    enemy.x = enemy.orbit_center_x + crate::fixed::Q12_4(x.round() as i16);
+                    enemy.y = enemy.orbit_center_y + crate::fixed::Q12_4(y.round() as i16);
                 }
                 Some(orbit) if orbit.orbit_type == OrbitType::Bezier => {
                     let duration = orbit.duration_frames.max(1);
@@ -336,41 +338,33 @@ impl World {
             self.player_group_fire_cooldown -= 1;
         }
 
-        let max_player_bullet_groups = match self.growth_level {
-            0 => 4,
-            1 => 6,
-            2 => 8,
-            3 => 10,
-            _ => 12,
-        };
+        let growth_data = player_growth_data(self.growth_level);
         let interval_elapsed = self.player_group_fire_cooldown == 0;
         if (fire_trigger || (fire_held && interval_elapsed))
-            && self.active_player_bullet_group_count() < max_player_bullet_groups
+            && self.active_player_bullet_group_count() < usize::from(growth_data.max_bullet_groups)
         {
-            let shot_count = match self.growth_level {
-                0 => 1,
-                1 => 2,
-                2 => 3,
-                3 => 4,
-                _ => 5,
-            };
+            let shot_count = usize::from(growth_data.bullets_per_group);
             let group_id = self.next_player_bullet_group_id;
             self.next_player_bullet_group_id =
                 self.next_player_bullet_group_id.wrapping_add(1).max(1);
-            let bullet_speed = PLAYER_BULLET_SPEED_BY_LEVEL_Q12
-                [usize::from(self.growth_level.min(4))];
+            let bullet_speed = growth_data.speed;
             for index in 0..shot_count {
                 let offset_pixels = (index as i16 * 16) - ((shot_count - 1) as i16 * 8);
+                let (velocity_x, velocity_y) =
+                    direction_velocity(growth_data.directions[index], bullet_speed);
                 let _ = self.player_bullets.spawn(crate::runtime::ObjectState {
-                    character_id: 1,
+                    character_id: growth_data.bullet_character_id,
                     group_id,
                     x: self.player_x + crate::fixed::Q12_4::from_int(offset_pixels),
                     y: self.player_y,
-                    velocity_y: bullet_speed,
+                    velocity_x,
+                    velocity_y,
                     ..Default::default()
                 });
             }
-            if let Some(sound_id) = bullet_character(1).map(|data| data.fire_sound_id) {
+            if let Some(sound_id) =
+                bullet_character(growth_data.bullet_character_id).map(|data| data.fire_sound_id)
+            {
                 self.audio_events.push(AudioEvent::Sound(sound_id));
             }
             self.player_group_fire_cooldown = PLAYER_GROUP_FIRE_INTERVAL_FRAMES;
@@ -577,6 +571,10 @@ impl World {
                 self.recover_hp();
                 self.recovery_stock -= 1;
             }
+            while self.growth_level < 4 && self.recovery_stock > 0 {
+                self.growth_level += 1;
+                self.recovery_stock -= 1;
+            }
             if self.hp == 0 {
                 self.lives = self.lives.saturating_sub(1);
                 if self.lives == 0 {
@@ -625,7 +623,7 @@ impl World {
         let Some(trait_data) = character_trait(schedule.character_id) else {
             return;
         };
-        let object = crate::runtime::ObjectState {
+        let mut object = crate::runtime::ObjectState {
             character_id: schedule.character_id,
             orbit_id: schedule.orbit_id,
             fire_pattern_id: schedule.fire_pattern_id,
@@ -641,6 +639,14 @@ impl World {
             hp: trait_data.max_hp,
             ..Default::default()
         };
+        if let Some(orbit) = ORBIT_DATA
+            .iter()
+            .find(|orbit| orbit.orbit_id == schedule.orbit_id)
+            && orbit.orbit_type == OrbitType::Circle
+        {
+            object.orbit_center_x = object.x - orbit.radius;
+            object.orbit_center_y = object.y;
+        }
         match schedule.object_type {
             ObjectType::Enemy | ObjectType::Boss => {
                 self.enemies.spawn(object);
@@ -655,60 +661,7 @@ impl World {
 
 impl crate::data::FirePatternData {
     pub fn velocity(&self) -> (crate::fixed::Q12_4, crate::fixed::Q12_4) {
-        use crate::data::Direction16::*;
-        let speed = self.speed.raw();
-        let diagonal = ((speed as i32 * 181) / 256) as i16;
-        match self.direction {
-            North => (crate::fixed::Q12_4::ZERO, crate::fixed::Q12_4(-speed)),
-            NorthNorthEast => (
-                crate::fixed::Q12_4(diagonal / 2),
-                crate::fixed::Q12_4(-diagonal),
-            ),
-            NorthEast => (
-                crate::fixed::Q12_4(diagonal),
-                crate::fixed::Q12_4(-diagonal),
-            ),
-            EastNorthEast => (
-                crate::fixed::Q12_4(speed),
-                crate::fixed::Q12_4(-diagonal / 2),
-            ),
-            East => (crate::fixed::Q12_4(speed), crate::fixed::Q12_4::ZERO),
-            EastSouthEast => (
-                crate::fixed::Q12_4(speed),
-                crate::fixed::Q12_4(diagonal / 2),
-            ),
-            SouthEast => (crate::fixed::Q12_4(diagonal), crate::fixed::Q12_4(diagonal)),
-            SouthSouthEast => (
-                crate::fixed::Q12_4(diagonal / 2),
-                crate::fixed::Q12_4(diagonal),
-            ),
-            South => (crate::fixed::Q12_4::ZERO, crate::fixed::Q12_4(speed)),
-            SouthSouthWest => (
-                crate::fixed::Q12_4(-diagonal / 2),
-                crate::fixed::Q12_4(diagonal),
-            ),
-            SouthWest => (
-                crate::fixed::Q12_4(-diagonal),
-                crate::fixed::Q12_4(diagonal),
-            ),
-            WestSouthWest => (
-                crate::fixed::Q12_4(-speed),
-                crate::fixed::Q12_4(diagonal / 2),
-            ),
-            West => (crate::fixed::Q12_4(-speed), crate::fixed::Q12_4::ZERO),
-            WestNorthWest => (
-                crate::fixed::Q12_4(-speed),
-                crate::fixed::Q12_4(-diagonal / 2),
-            ),
-            NorthWest => (
-                crate::fixed::Q12_4(-diagonal),
-                crate::fixed::Q12_4(-diagonal),
-            ),
-            NorthNorthWest => (
-                crate::fixed::Q12_4(-diagonal / 2),
-                crate::fixed::Q12_4(-diagonal),
-            ),
-        }
+        crate::data::direction_velocity(self.direction, self.speed)
     }
 }
 

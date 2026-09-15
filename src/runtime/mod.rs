@@ -26,6 +26,8 @@ pub struct ObjectState {
     pub orbit_frame: u32,
     pub orbit_origin_x: Q12_4,
     pub orbit_origin_y: Q12_4,
+    pub orbit_center_x: Q12_4,
+    pub orbit_center_y: Q12_4,
     pub fire_pattern_id: u16,
     pub x: Q12_4,
     pub y: Q12_4,

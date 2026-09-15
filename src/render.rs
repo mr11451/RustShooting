@@ -636,12 +636,26 @@ impl GpuRenderer {
         self.surface.configure(&self.device, &self.config);
     }
 
-    pub fn render(&mut self, world: &World) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(
+        &mut self,
+        world: &World,
+        paused: bool,
+        pause_frame: u32,
+    ) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
 
         // Generate solid vertices for UI, HUD, and effects
         let mut solid_vertices = Vec::new();
         build_world_vertices(world, &mut solid_vertices);
+        if paused && (pause_frame / 20).is_multiple_of(2) {
+            push_text_centered(
+                &mut solid_vertices,
+                LOGICAL_HEIGHT / 2.0,
+                "PAUSE",
+                [1.0, 0.85, 0.2],
+                5.0,
+            );
+        }
 
         if !solid_vertices.is_empty() {
             let write_len = solid_vertices.len().min(MAX_SOLID_VERTICES);
@@ -854,40 +868,42 @@ impl GpuRenderer {
                 pass.draw(0..count, 0..1);
 
                 // 2. Draw active sprites
-                pass.set_pipeline(&self.texture_pipeline);
-                pass.set_vertex_buffer(0, self.sprite_vertex_buffer.slice(..));
+                if world.state != GameState::StageClear {
+                    pass.set_pipeline(&self.texture_pipeline);
+                    pass.set_vertex_buffer(0, self.sprite_vertex_buffer.slice(..));
 
-                if enemy_start < enemy_end {
-                    pass.set_bind_group(0, &self.enemy_bind_groups[anim_frame], &[]);
-                    pass.draw(enemy_start as u32..enemy_end as u32, 0..1);
-                }
-                if boss_start < boss_end {
-                    pass.set_bind_group(0, &self.boss_bind_groups[boss_anim], &[]);
-                    pass.draw(boss_start as u32..boss_end as u32, 0..1);
-                }
-                if item_start < item_end {
-                    pass.set_bind_group(0, &self.item_bind_groups[anim_frame], &[]);
-                    pass.draw(item_start as u32..item_end as u32, 0..1);
-                }
-                if bullet_p_start < bullet_p_end {
-                    pass.set_bind_group(0, &self.bullet_player_bind_group, &[]);
-                    pass.draw(bullet_p_start as u32..bullet_p_end as u32, 0..1);
-                }
-                if bullet_pierce_start < bullet_pierce_end {
-                    pass.set_bind_group(0, &self.bullet_pierce_bind_group, &[]);
-                    pass.draw(bullet_pierce_start as u32..bullet_pierce_end as u32, 0..1);
-                }
-                if bullet_e0_start < bullet_e0_end {
-                    pass.set_bind_group(0, &self.enemy_bullet_bind_groups[0], &[]);
-                    pass.draw(bullet_e0_start as u32..bullet_e0_end as u32, 0..1);
-                }
-                if bullet_e1_start < bullet_e1_end {
-                    pass.set_bind_group(0, &self.enemy_bullet_bind_groups[1], &[]);
-                    pass.draw(bullet_e1_start as u32..bullet_e1_end as u32, 0..1);
-                }
-                if player_start < player_end {
-                    pass.set_bind_group(0, &self.player_bind_groups[player_anim], &[]);
-                    pass.draw(player_start as u32..player_end as u32, 0..1);
+                    if enemy_start < enemy_end {
+                        pass.set_bind_group(0, &self.enemy_bind_groups[anim_frame], &[]);
+                        pass.draw(enemy_start as u32..enemy_end as u32, 0..1);
+                    }
+                    if boss_start < boss_end {
+                        pass.set_bind_group(0, &self.boss_bind_groups[boss_anim], &[]);
+                        pass.draw(boss_start as u32..boss_end as u32, 0..1);
+                    }
+                    if item_start < item_end {
+                        pass.set_bind_group(0, &self.item_bind_groups[anim_frame], &[]);
+                        pass.draw(item_start as u32..item_end as u32, 0..1);
+                    }
+                    if bullet_p_start < bullet_p_end {
+                        pass.set_bind_group(0, &self.bullet_player_bind_group, &[]);
+                        pass.draw(bullet_p_start as u32..bullet_p_end as u32, 0..1);
+                    }
+                    if bullet_pierce_start < bullet_pierce_end {
+                        pass.set_bind_group(0, &self.bullet_pierce_bind_group, &[]);
+                        pass.draw(bullet_pierce_start as u32..bullet_pierce_end as u32, 0..1);
+                    }
+                    if bullet_e0_start < bullet_e0_end {
+                        pass.set_bind_group(0, &self.enemy_bullet_bind_groups[0], &[]);
+                        pass.draw(bullet_e0_start as u32..bullet_e0_end as u32, 0..1);
+                    }
+                    if bullet_e1_start < bullet_e1_end {
+                        pass.set_bind_group(0, &self.enemy_bullet_bind_groups[1], &[]);
+                        pass.draw(bullet_e1_start as u32..bullet_e1_end as u32, 0..1);
+                    }
+                    if player_start < player_end {
+                        pass.set_bind_group(0, &self.player_bind_groups[player_anim], &[]);
+                        pass.draw(player_start as u32..player_end as u32, 0..1);
+                    }
                 }
             }
 
@@ -1137,9 +1153,21 @@ pub fn build_world_vertices(world: &World, vertices: &mut Vec<Vertex>) {
             );
         }
         GameState::GameOver => {
-            push_text_colored(vertices, 45.0, 240.0, "GAME OVER", [0.9, 0.2, 0.2], 3.5);
+            push_text_centered(
+                vertices,
+                LOGICAL_HEIGHT / 2.0,
+                "GAME OVER",
+                [0.9, 0.2, 0.2],
+                3.5,
+            );
             let score_text = format!("FINAL SCORE: {:08}", world.score);
-            push_text_colored(vertices, 55.0, 320.0, &score_text, [1.0, 1.0, 1.0], 1.5);
+            push_text_centered_x(
+                vertices,
+                LOGICAL_HEIGHT / 2.0 + 70.0,
+                &score_text,
+                [1.0, 1.0, 1.0],
+                1.5,
+            );
         }
         GameState::Ending => {
             let base_y = LOGICAL_HEIGHT * 0.32;
@@ -1331,6 +1359,17 @@ fn append_hud_vertices(world: &World, vertices: &mut Vec<Vertex>) {
         HUD_Y + 4.0,
         &stock_str,
         [1.0, 0.85, 0.2],
+        1.0,
+    );
+
+    // 5. Stage number at the lower right
+    let stage_str = format!("S:{:02}", world.stage_id);
+    push_text_colored(
+        vertices,
+        440.0,
+        HUD_Y + 4.0,
+        &stage_str,
+        [0.95, 0.95, 1.0],
         1.0,
     );
 }

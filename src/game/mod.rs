@@ -14,15 +14,15 @@ use crate::input::InputState;
 
 pub fn update(world: &mut World, input: InputState) {
     if input.quit {
-        world.state = GameState::GameOver;
+        world.reset_stage();
+        world.state = GameState::Title;
         return;
     }
 
     match world.state {
         GameState::Title => {
             if input.start || input.fire {
-                world.frame = 0;
-                world.state = GameState::StageIntro;
+                world.restart_from_stage_one();
             } else if world.frame.saturating_add(1) >= 900 {
                 world.frame = 0;
                 world.state = GameState::Demo;
@@ -30,8 +30,7 @@ pub fn update(world: &mut World, input: InputState) {
         }
         GameState::Demo => {
             if input.start || input.fire {
-                world.frame = 0;
-                world.state = GameState::StageIntro;
+                world.restart_from_stage_one();
             } else if world.frame.saturating_add(1) >= 900 {
                 world.frame = 0;
                 world.state = GameState::Title;
@@ -63,19 +62,16 @@ pub fn update(world: &mut World, input: InputState) {
             if finished {
                 world.ranking.insert(world.name_entry.name, world.score);
                 let _ = world.ranking.save_default();
-                world.frame = 0;
-                world.state = GameState::Demo;
+                world.restart_from_stage_one();
             } else if world.frame.saturating_add(1) >= 900 {
-                world.frame = 0;
-                world.state = GameState::Demo;
+                world.restart_from_stage_one();
             }
         }
         GameState::Ending if world.frame.saturating_add(1) >= 900 => {
             if world.ranking.is_high_score(world.score) {
                 world.begin_name_entry();
             } else {
-                world.reset_stage();
-                world.state = GameState::Title;
+                world.restart_from_stage_one();
             }
         }
         _ => {}
@@ -110,6 +106,55 @@ mod tests {
         update(&mut world, InputState::default());
 
         assert_eq!(world.enemies.active_count(), 1);
+    }
+
+    #[test]
+    fn quit_input_returns_to_title() {
+        let mut world = World {
+            state: GameState::Playing,
+            stage_id: 6,
+            ..World::default()
+        };
+
+        update(
+            &mut world,
+            InputState {
+                quit: true,
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(world.state, GameState::Title);
+        assert_eq!(world.stage_id, 6);
+        assert_eq!(world.frame, 0);
+    }
+
+    #[test]
+    fn starting_from_title_resets_new_game_progress() {
+        let mut world = World {
+            state: GameState::Title,
+            stage_id: 6,
+            score: 123_456,
+            lives: 1,
+            growth_level: 4,
+            recovery_stock: 7,
+            ..World::default()
+        };
+
+        update(
+            &mut world,
+            InputState {
+                start: true,
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(world.state, GameState::StageIntro);
+        assert_eq!(world.stage_id, 1);
+        assert_eq!(world.score, 0);
+        assert_eq!(world.lives, 3);
+        assert_eq!(world.growth_level, 0);
+        assert_eq!(world.recovery_stock, 0);
     }
 
     #[test]
@@ -154,6 +199,68 @@ mod tests {
     }
 
     #[test]
+    fn stage_six_boss_uses_dedicated_orbit_data() {
+        let boss_schedule = crate::data::stage_schedule(6)
+            .find(|schedule| schedule.object_type == crate::data::ObjectType::Boss)
+            .expect("stage six boss schedule should exist");
+
+        assert_eq!(boss_schedule.character_id, 105);
+        assert_eq!(boss_schedule.orbit_id, 10);
+        assert_eq!(
+            crate::data::orbit(10).unwrap().orbit_type,
+            crate::data::OrbitType::Bezier
+        );
+    }
+
+    #[test]
+    fn circle_orbit_advances_about_one_pixel_per_frame() {
+        let mut world = World {
+            state: GameState::Playing,
+            ..World::default()
+        };
+        world.enemies.spawn(crate::runtime::ObjectState {
+            character_id: 100,
+            orbit_id: 9,
+            orbit_center_x: crate::data::BOSS_ORBIT_CENTER_X_Q12
+                - crate::data::BOSS_ORBIT_RADIUS_Q12,
+            orbit_center_y: crate::data::BOSS_ORBIT_CENTER_Y_Q12,
+            orbit_origin_x: crate::data::BOSS_ORBIT_CENTER_X_Q12,
+            orbit_origin_y: crate::data::BOSS_ORBIT_CENTER_Y_Q12,
+            ..Default::default()
+        });
+
+        world.update_enemy_movement();
+        let first = world.enemies.first_active().unwrap().y;
+        world.update_enemy_movement();
+        let second = world.enemies.first_active().unwrap().y;
+
+        assert_eq!(second - first, crate::fixed::Q12_4::from_int(1));
+    }
+
+    #[test]
+    fn circle_orbit_starts_at_previous_trajectory_position() {
+        let mut world = World {
+            state: GameState::Playing,
+            ..World::default()
+        };
+        world.enemies.spawn(crate::runtime::ObjectState {
+            character_id: 100,
+            orbit_id: 8,
+            orbit_frame: 90,
+            orbit_origin_x: crate::fixed::Q12_4(1_000),
+            orbit_origin_y: crate::fixed::Q12_4(2_000),
+            ..Default::default()
+        });
+
+        world.update_enemy_movement();
+        let position_after_transition = world.enemies.first_active().unwrap().x;
+        world.update_enemy_movement();
+        let position_at_circle_start = world.enemies.first_active().unwrap().x;
+
+        assert_eq!(position_at_circle_start, position_after_transition);
+    }
+
+    #[test]
     fn enemy_fires_bullet_at_pattern_frame() {
         let mut world = World {
             state: GameState::Playing,
@@ -165,6 +272,24 @@ mod tests {
         }
 
         assert_eq!(world.enemy_bullets.active_count(), 1);
+    }
+
+    #[test]
+    fn enemy_bullet_uses_speed_from_pattern_data() {
+        let mut world = World {
+            state: GameState::Playing,
+            ..World::default()
+        };
+
+        world.spawn_scheduled_objects();
+        for _ in 0..30 {
+            world.update_enemy_movement();
+        }
+        let bullet = world
+            .enemy_bullets
+            .first_active()
+            .expect("enemy bullet should be spawned");
+        assert_eq!(bullet.velocity_y, crate::fixed::Q12_4(20));
     }
 
     #[test]
@@ -266,10 +391,12 @@ mod tests {
 
     #[test]
     fn player_bullet_speed_increases_by_level() {
-        for (growth_level, expected_speed) in [(-64, 0), (-67, 1), (-70, 2), (-74, 3), (-77, 4)] {
+        for (expected_speed, growth_level) in
+            [(-64i16, 0u8), (-67, 1), (-69, 2), (-73, 3), (-76, 4)]
+        {
             let mut world = World {
                 state: GameState::Playing,
-                growth_level: expected_speed,
+                growth_level,
                 ..World::default()
             };
 
@@ -279,7 +406,7 @@ mod tests {
                 .player_bullets
                 .first_active()
                 .expect("bullet should be spawned");
-            assert_eq!(bullet.velocity_y.raw(), growth_level);
+            assert_eq!(bullet.velocity_y.raw(), expected_speed);
         }
     }
 
@@ -374,6 +501,28 @@ mod tests {
         world.resolve_player_hits();
 
         assert_eq!(world.hp, 100);
+        assert_eq!(world.recovery_stock, 0);
+    }
+
+    #[test]
+    fn remaining_recovery_stock_restores_growth_after_hp() {
+        let mut world = World {
+            state: GameState::Playing,
+            hp: 90,
+            recovery_stock: 3,
+            ..World::default()
+        };
+        world.enemy_bullets.spawn(crate::runtime::ObjectState {
+            character_id: 2,
+            x: world.player_x,
+            y: world.player_y,
+            ..Default::default()
+        });
+
+        world.resolve_player_hits();
+
+        assert_eq!(world.hp, 100);
+        assert_eq!(world.growth_level, 2);
         assert_eq!(world.recovery_stock, 0);
     }
 
@@ -805,7 +954,7 @@ mod tests {
     }
 
     #[test]
-    fn name_entry_times_out_to_demo_after_900_updates() {
+    fn name_entry_times_out_to_stage_one_after_900_updates() {
         let mut world = World::default();
         world.begin_name_entry();
 
@@ -813,7 +962,8 @@ mod tests {
             update(&mut world, InputState::default());
         }
 
-        assert_eq!(world.state, GameState::Demo);
+        assert_eq!(world.state, GameState::StageIntro);
+        assert_eq!(world.stage_id, 1);
         assert_eq!(world.frame, 1);
     }
 
@@ -874,7 +1024,7 @@ mod tests {
     }
 
     #[test]
-    fn name_entry_saves_to_ranking_and_transitions_to_demo() {
+    fn name_entry_saves_to_ranking_and_starts_stage_one() {
         let mut world = World {
             score: 500_000,
             ranking: RankingTable::default(),
@@ -911,7 +1061,8 @@ mod tests {
             },
         );
 
-        assert_eq!(world.state, GameState::Demo);
+        assert_eq!(world.state, GameState::StageIntro);
+        assert_eq!(world.stage_id, 1);
         assert_eq!(world.ranking.entries[0].name, *b"AAA");
         assert_eq!(world.ranking.entries[0].score, 500_000);
     }

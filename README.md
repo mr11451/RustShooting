@@ -26,6 +26,40 @@ cargo build --release
 cargo run --release
 ```
 
+## exeの配置と実行
+
+実行ファイルは次に生成されます。
+
+```text
+target/release/rust_shooting.exe
+```
+
+このゲームは`assets/`と`data/`を実行時のカレントディレクトリから相対パスで読み込みます。配布時は、次の構成で`rust_shooting.exe`を置いてください。
+
+```text
+RustShooting/
+    rust_shooting.exe
+    assets/
+        audio/
+        backgrounds/
+        bullets/
+        characters/
+    data/
+        stage01_tilemap.txt
+        *.toml
+```
+
+PowerShellでは、`assets`と`data`があるディレクトリから起動します。
+
+```powershell
+Set-Location C:\path\to\RustShooting
+.\rust_shooting.exe
+```
+
+exeだけを別フォルダへコピーしたり、ショートカットの作業フォルダを別の場所にしたりすると、画像・音声・背景を読み込めません。ショートカットを作る場合も、作業フォルダを`assets`と`data`の親ディレクトリに設定してください。
+
+ランキング保存先はWindowsでは`%APPDATA%\RustShooting\ranking.bin`です。環境変数が利用できない場合は`data/ranking.bin`へフォールバックします。
+
 品質確認:
 
 ```powershell

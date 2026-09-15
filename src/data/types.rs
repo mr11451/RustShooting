@@ -4,8 +4,6 @@ use crate::fixed::Q12_4;
 pub struct CharacterTrait {
     pub character_id: u16,
     pub character_type: super::CharacterType,
-    pub shape_id: u16,
-    pub animation_id: u16,
     pub hitbox_width: i16,
     pub hitbox_height: i16,
     pub max_hp: u16,
@@ -22,8 +20,6 @@ pub struct CharacterTrait {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ScheduleData {
-    pub schedule_id: u16,
-    pub stage_id: u8,
     pub frame: u32,
     pub spawn_x: Q12_4,
     pub spawn_y: Q12_4,

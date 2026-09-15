@@ -4,8 +4,6 @@ use super::*;
 pub const STAGE_05_SCHEDULE: &[ScheduleData] = &[
     // Stage 5
     ScheduleData {
-        schedule_id: 401,
-        stage_id: 5,
         frame: 0,
         spawn_x: Q12_4(2_000),
         spawn_y: Q12_4(-384),
@@ -17,8 +15,6 @@ pub const STAGE_05_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(20),
     },
     ScheduleData {
-        schedule_id: 402,
-        stage_id: 5,
         frame: 900,
         spawn_x: Q12_4(3_840),
         spawn_y: Q12_4(3_840),
@@ -30,8 +26,6 @@ pub const STAGE_05_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(20),
     },
     ScheduleData {
-        schedule_id: 403,
-        stage_id: 5,
         frame: 1_800,
         spawn_x: Q12_4(3_840),
         spawn_y: Q12_4(-512),
@@ -43,8 +37,6 @@ pub const STAGE_05_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(20),
     },
     ScheduleData {
-        schedule_id: 404,
-        stage_id: 5,
         frame: 2_700,
         spawn_x: Q12_4(2_000),
         spawn_y: Q12_4(4_000),
@@ -56,8 +48,6 @@ pub const STAGE_05_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(20),
     },
     ScheduleData {
-        schedule_id: 405,
-        stage_id: 5,
         frame: 3_600,
         spawn_x: Q12_4(5_500),
         spawn_y: Q12_4(4_000),
@@ -69,8 +59,6 @@ pub const STAGE_05_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(20),
     },
     ScheduleData {
-        schedule_id: 406,
-        stage_id: 5,
         frame: 4_500,
         spawn_x: Q12_4(3_840),
         spawn_y: Q12_4(5_000),
@@ -82,8 +70,6 @@ pub const STAGE_05_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(20),
     },
     ScheduleData {
-        schedule_id: 407,
-        stage_id: 5,
         frame: 5_399,
         spawn_x: Q12_4(3_840),
         spawn_y: Q12_4(-512),

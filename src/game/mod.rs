@@ -116,7 +116,7 @@ mod tests {
 
         update(&mut world, InputState::default());
 
-        assert_eq!(world.enemies.active_count(), 1);
+        assert_eq!(world.enemies.active_count(), 2);
     }
 
     #[test]
@@ -282,7 +282,7 @@ mod tests {
             update(&mut world, InputState::default());
         }
 
-        assert_eq!(world.enemy_bullets.active_count(), 1);
+        assert_eq!(world.enemy_bullets.active_count(), 2);
     }
 
     #[test]
@@ -564,7 +564,9 @@ mod tests {
             ..Default::default()
         });
 
-        world.update_projectiles(false, false);
+        for _ in 0..30 {
+            world.update_projectiles(false, false);
+        }
 
         let bullet = world
             .enemy_bullets
@@ -572,6 +574,34 @@ mod tests {
             .expect("homing bullet should remain active");
         assert!(bullet.velocity_x.raw() > 0);
         assert!(bullet.velocity_y.raw().abs() < 30);
+    }
+
+    #[test]
+    fn homing_enemy_bullet_does_not_steer_during_respawn() {
+        let mut world = World {
+            state: GameState::Respawn,
+            player_x: crate::fixed::Q12_4(2_000),
+            player_y: crate::fixed::Q12_4(2_000),
+            ..World::default()
+        };
+        world.enemy_bullets.spawn(crate::runtime::ObjectState {
+            character_id: 16,
+            x: crate::fixed::Q12_4(1_000),
+            y: crate::fixed::Q12_4(2_000),
+            velocity_y: crate::fixed::Q12_4(30),
+            ..Default::default()
+        });
+
+        for _ in 0..30 {
+            world.update_enemy_projectiles();
+        }
+
+        let bullet = world
+            .enemy_bullets
+            .first_active()
+            .expect("homing bullet should remain active");
+        assert_eq!(bullet.velocity_x, crate::fixed::Q12_4::ZERO);
+        assert_eq!(bullet.velocity_y, crate::fixed::Q12_4(30));
     }
 
     #[test]
@@ -637,6 +667,7 @@ mod tests {
 
         assert_eq!(world.hp, 50);
         assert_eq!(world.invincible_frames, 90);
+        assert_eq!(world.enemies.first_active().unwrap().hp, 900);
     }
 
     #[test]

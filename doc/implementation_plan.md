@@ -68,7 +68,7 @@ Clippy の `-D warnings` による全ターゲット検証を実施済み。
 実施済み:
 
 - `AssetCatalog` によるキャラ・ボス・背景アセット読み込み
-- スプライトシート GIF の `shape_id` / `animation_id` 接続基盤
+- スプライトシート GIF のフレーム・タイル分割基盤
 - 仮画像データと弾画像データ
 - `StageAssetCache` によるステージ画像の再利用・解放
 - `SoundCatalog` によるゲーム開始時の効果音ロード
@@ -118,7 +118,7 @@ Clippy の `-D warnings` による全ターゲット検証を実施済み。
 
 実施済み:
 
-- `src/data/mod.rs` に `StageData`、`CharacterTrait`、`ScheduleData` を追加
+- `src/data/` に `StageData`、`CharacterTrait`、`ScheduleData`、軌道、弾、発射パターンをカテゴリ別に分割
 - ステージ1の敵と最終フレームのボスを定義
 - キャラクタ ID の解決とボス最終フレームをテスト
 - 軌道・発射パターン ID の参照検証

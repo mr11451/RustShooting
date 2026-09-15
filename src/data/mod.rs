@@ -387,7 +387,7 @@ mod tests {
     #[test]
     fn non_boss_enemy_has_aimed_but_non_homing_fire() {
         let schedule = stage_schedule(1)
-            .find(|schedule| schedule.schedule_id == 21)
+            .find(|schedule| schedule.character_id == 6 && schedule.fire_pattern_id == 15)
             .expect("non-boss aimed straight schedule should exist");
         let enemy = character_trait(schedule.character_id).expect("enemy trait should exist");
         let pattern = fire_pattern(schedule.fire_pattern_id).expect("fire pattern should exist");

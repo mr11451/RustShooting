@@ -33,6 +33,7 @@ pub struct ObjectState {
     pub y: Q12_4,
     pub velocity_x: Q12_4,
     pub velocity_y: Q12_4,
+    pub homing_frame: u16,
     pub hp: u16,
 }
 

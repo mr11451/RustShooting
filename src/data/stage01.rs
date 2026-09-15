@@ -4,8 +4,6 @@ use super::*;
 pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
     // Stage 1
     ScheduleData {
-        schedule_id: 1,
-        stage_id: 1,
         frame: 0,
         spawn_x: Q12_4(1_920),
         spawn_y: Q12_4(-384),
@@ -17,8 +15,39 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 2,
-        stage_id: 1,
+        frame: 0,
+        spawn_x: Q12_4(5_760),
+        spawn_y: Q12_4(-384),
+        object_type: ObjectType::Enemy,
+        character_id: 2,
+        orbit_id: 1,
+        difficulty: 1,
+        fire_pattern_id: 1,
+        background_speed: Q12_4(16),
+    },
+    ScheduleData {
+        frame: 45,
+        spawn_x: Q12_4(1_920),
+        spawn_y: Q12_4(-384),
+        object_type: ObjectType::Enemy,
+        character_id: 2,
+        orbit_id: 1,
+        difficulty: 1,
+        fire_pattern_id: 1,
+        background_speed: Q12_4(16),
+    },
+    ScheduleData {
+        frame: 45,
+        spawn_x: Q12_4(5_760),
+        spawn_y: Q12_4(-384),
+        object_type: ObjectType::Enemy,
+        character_id: 2,
+        orbit_id: 1,
+        difficulty: 1,
+        fire_pattern_id: 1,
+        background_speed: Q12_4(16),
+    },
+    ScheduleData {
         frame: 90,
         spawn_x: Q12_4(3_840),
         spawn_y: Q12_4(-384),
@@ -30,8 +59,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 3,
-        stage_id: 1,
         frame: 900,
         spawn_x: Q12_4(1_920),
         spawn_y: Q12_4(3_840),
@@ -43,8 +70,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 4,
-        stage_id: 1,
         frame: 1_800,
         spawn_x: Q12_4(5_760),
         spawn_y: Q12_4(-384),
@@ -56,8 +81,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 5,
-        stage_id: 1,
         frame: 2_700,
         spawn_x: Q12_4(3_840),
         spawn_y: Q12_4(5_000),
@@ -69,8 +92,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 6,
-        stage_id: 1,
         frame: 3_600,
         spawn_x: Q12_4(2_400),
         spawn_y: Q12_4(4_000),
@@ -82,8 +103,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 7,
-        stage_id: 1,
         frame: 4_500,
         spawn_x: Q12_4(4_800),
         spawn_y: Q12_4(4_000),
@@ -95,8 +114,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 8,
-        stage_id: 1,
         frame: 5_399,
         spawn_x: Q12_4(3_840),
         spawn_y: Q12_4(-512),
@@ -109,8 +126,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
     },
     // Stage 1 preview entries: cover every enemy ID and orbit definition.
     ScheduleData {
-        schedule_id: 9,
-        stage_id: 1,
         frame: 300,
         spawn_x: Q12_4(1_000),
         spawn_y: Q12_4(-384),
@@ -122,8 +137,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 10,
-        stage_id: 1,
         frame: 600,
         spawn_x: Q12_4(2_500),
         spawn_y: Q12_4(-384),
@@ -135,8 +148,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 11,
-        stage_id: 1,
         frame: 1_200,
         spawn_x: Q12_4(3_840),
         spawn_y: Q12_4(-384),
@@ -148,8 +159,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 12,
-        stage_id: 1,
         frame: 1_500,
         spawn_x: Q12_4(5_500),
         spawn_y: Q12_4(-384),
@@ -161,8 +170,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 13,
-        stage_id: 1,
         frame: 2_100,
         spawn_x: Q12_4(6_000),
         spawn_y: Q12_4(-384),
@@ -174,8 +181,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 14,
-        stage_id: 1,
         frame: 2_400,
         spawn_x: Q12_4(1_000),
         spawn_y: Q12_4(-384),
@@ -187,8 +192,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 15,
-        stage_id: 1,
         frame: 3_000,
         spawn_x: Q12_4(2_500),
         spawn_y: Q12_4(-384),
@@ -200,8 +203,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 16,
-        stage_id: 1,
         frame: 3_300,
         spawn_x: Q12_4(3_840),
         spawn_y: Q12_4(-384),
@@ -213,8 +214,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 17,
-        stage_id: 1,
         frame: 3_900,
         spawn_x: Q12_4(2_000),
         spawn_y: Q12_4(2_000),
@@ -226,8 +225,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 18,
-        stage_id: 1,
         frame: 4_200,
         spawn_x: Q12_4(3_840),
         spawn_y: Q12_4(-384),
@@ -239,8 +236,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 19,
-        stage_id: 1,
         frame: 4_800,
         spawn_x: Q12_4(3_840),
         spawn_y: Q12_4(-384),
@@ -252,8 +247,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 20,
-        stage_id: 1,
         frame: 4_950,
         spawn_x: Q12_4(1_920),
         spawn_y: Q12_4(-384),
@@ -265,8 +258,6 @@ pub const STAGE_01_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(16),
     },
     ScheduleData {
-        schedule_id: 21,
-        stage_id: 1,
         frame: 5_100,
         spawn_x: Q12_4(5_760),
         spawn_y: Q12_4(-384),

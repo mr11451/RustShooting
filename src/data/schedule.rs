@@ -100,7 +100,15 @@ pub fn all_schedules() -> impl Iterator<Item = &'static ScheduleData> {
 pub const STAGE_ONE_SCHEDULE: &[ScheduleData] = STAGE_01_SCHEDULE;
 
 pub fn stage_schedule(stage_id: u8) -> impl Iterator<Item = &'static ScheduleData> {
-    all_schedules().filter(move |schedule| schedule.stage_id == stage_id)
+    match stage_id {
+        1 => STAGE_01_SCHEDULE.iter(),
+        2 => STAGE_02_SCHEDULE.iter(),
+        3 => STAGE_03_SCHEDULE.iter(),
+        4 => STAGE_04_SCHEDULE.iter(),
+        5 => STAGE_05_SCHEDULE.iter(),
+        6 => STAGE_06_SCHEDULE.iter(),
+        _ => [].iter(),
+    }
 }
 
 pub fn stage_enemy_character_ids(stage_id: u8) -> Vec<u16> {

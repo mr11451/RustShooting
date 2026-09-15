@@ -4,8 +4,6 @@ use super::*;
 pub const STAGE_02_SCHEDULE: &[ScheduleData] = &[
     // Stage 2
     ScheduleData {
-        schedule_id: 101,
-        stage_id: 2,
         frame: 0,
         spawn_x: Q12_4(1_500),
         spawn_y: Q12_4(-384),
@@ -17,8 +15,6 @@ pub const STAGE_02_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(24),
     },
     ScheduleData {
-        schedule_id: 102,
-        stage_id: 2,
         frame: 120,
         spawn_x: Q12_4(6_000),
         spawn_y: Q12_4(-384),
@@ -30,8 +26,6 @@ pub const STAGE_02_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(24),
     },
     ScheduleData {
-        schedule_id: 103,
-        stage_id: 2,
         frame: 900,
         spawn_x: Q12_4(3_840),
         spawn_y: Q12_4(3_840),
@@ -43,8 +37,6 @@ pub const STAGE_02_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(24),
     },
     ScheduleData {
-        schedule_id: 104,
-        stage_id: 2,
         frame: 1_800,
         spawn_x: Q12_4(3_000),
         spawn_y: Q12_4(-384),
@@ -56,8 +48,6 @@ pub const STAGE_02_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(24),
     },
     ScheduleData {
-        schedule_id: 105,
-        stage_id: 2,
         frame: 2_700,
         spawn_x: Q12_4(3_840),
         spawn_y: Q12_4(5_000),
@@ -69,8 +59,6 @@ pub const STAGE_02_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(24),
     },
     ScheduleData {
-        schedule_id: 106,
-        stage_id: 2,
         frame: 3_600,
         spawn_x: Q12_4(2_000),
         spawn_y: Q12_4(4_000),
@@ -82,8 +70,6 @@ pub const STAGE_02_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(24),
     },
     ScheduleData {
-        schedule_id: 107,
-        stage_id: 2,
         frame: 4_500,
         spawn_x: Q12_4(5_000),
         spawn_y: Q12_4(4_000),
@@ -95,8 +81,6 @@ pub const STAGE_02_SCHEDULE: &[ScheduleData] = &[
         background_speed: Q12_4(24),
     },
     ScheduleData {
-        schedule_id: 108,
-        stage_id: 2,
         frame: 5_399,
         spawn_x: Q12_4(3_840),
         spawn_y: Q12_4(-512),

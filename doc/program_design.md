@@ -8,6 +8,7 @@
 - `winit 0.30`、`wgpu 27`、`rodio 0.21`、`gilrs 0.11`を使用
 - 論理画面 `480x640`、固定更新 `60fps`
 - 6ステージ、敵・ボス・敵弾・アイテム・エフェクト、背景スクロールを実装
+- データ定義は`data/player.rs`、`bullet.rs`、`character.rs`、`orbit.rs`、`schedule.rs`と`stage01.rs`〜`stage06.rs`へ分割
 - ボスは定位置移動軌道から円軌道へ遷移し、`next_orbit_id`で円軌道を無限ループする。軌道終了による画面外消去を行わない
 - GIFスプライトをGPUテクスチャとして描画。敵弾は8x8の2パターン
 - HUD、BGM/SE、ランキング保存、名前入力、ステージ遷移を実装
@@ -78,12 +79,14 @@ src/
     firing.rs             敵弾発射パターン処理
     scoring.rs            得点とランキング
   data/
-    mod.rs
-    stage.rs              StageData と定数配列
-    character.rs          CharacterTrait
-    orbit.rs              OrbitData
-    firing.rs             FirePatternData
-    bullet.rs              BulletCharacterData
+    mod.rs                共通型・検証・公開API
+    types.rs              データ構造体
+    player.rs             自機成長・自弾画像
+    bullet.rs             自弾・敵弾・発射パターン
+    character.rs          敵・ボス特性と画像
+    orbit.rs              軌道データ
+    schedule.rs           ステージ情報と集約API
+    stage01.rs..stage06.rs ステージ別スケジュール
   runtime/
     mod.rs
     object.rs             共通オブジェクト状態
@@ -143,18 +146,18 @@ assets/
 src/
   asset.rs       画像ファイルの読み込みと ID 管理
   texture.rs     wgpu::Texture、TextureView、Sampler の管理
-  render.rs      shape_id からテクスチャを選択して描画
+  render.rs      character_idと画像データからテクスチャを選択して描画
 ```
 
 画像取り込みの流れ:
 
-1. `StageData` とスケジュールから、対象ステージで使用する `shape_id`、弾画像、エフェクト、背景を収集する
-2. `shape_id` に対応する画像パスをアセット定義から解決する
+1. `StageData` とスケジュールから、対象ステージで使用する `character_id`、弾画像、エフェクト、背景を収集する
+2. ステージ別画像データと`character_id`から画像パスを解決する
 3. スプライトシート GIF をデコードし、各フレームを RGBA8 のピクセルデータへ展開する
 4. `wgpu::Queue::write_texture` で GPU テクスチャへ転送する
 5. `TextureView` と `Sampler` をステージ単位のキャッシュへ登録する
 6. 必要な画像の読み込み完了後に `Playing` へ遷移する
-7. 描画時に `shape_id` からステージキャッシュのテクスチャを取得する
+7. 描画時に`character_id`からステージキャッシュのテクスチャを取得する
 8. `CharacterTrait` の矩形サイズを論理座標へ変換してスプライトと当たり判定へ使用する
 
 リボーン時は同じステージのキャッシュを再利用し、ステージ切り替え時に前ステージのキャッシュを解放して次ステージの `StageIntro` で入れ替える。読み込み中は敵を生成せず、スケジュールのフレームカウントも進めない。読み込み失敗時はエラーを記録し、代替矩形または代替テクスチャを登録してゲームを継続する。
@@ -172,11 +175,11 @@ src/
 
 - キャラクタ画像はスプライトシート GIF とする
 - 1 ファイルに同一サイズのアニメーションフレームを横またはタイル状に配置する
-- GIF の再生タイミングは使用せず、ゲーム側の `animation_id`、フレーム番号、フレームレートで制御する
+- GIFの再生タイミングは使用せず、ゲーム側のフレーム番号とフレームレートで制御する
 - GIF の各フレームを RGBA8 へ展開してから `wgpu` テクスチャへ転送する
 - GIF の透過は読み込み時に RGBA のアルファ値へ変換する
 - `SpriteSheet::from_gif_path` または `SpriteSheet::from_gif_bytes` で読み込む
-- GIF の各アニメーションフレームを `animation_id`、シート内の各タイルを `tile_id` として保持する
+  - GIF の各アニメーションフレームを`animation_id`、シート内の各タイルを`tile_id`として`SpriteSheet`内部に保持する
 - `SpriteSheet::frame(animation_id, tile_id)` で描画対象の RGBA8 フレームを参照する
 - 画像が見つからない、またはデコードできない場合は生成色の矩形を代替表示し、ゲームループを停止させない
 
@@ -274,12 +277,13 @@ StageIntro --90フレーム--> Playing
 Playing --ボス撃破--> StageClear
 StageClear --90フレーム、ステージ6以外--> StageIntro
 StageClear --90フレーム、ステージ6--> Ending
-Playing --被弾後もHP0、残機0--> GameOver
+Playing --HP0、残機あり--> Respawn --600フレーム--> StageIntro
+Playing --HP0、残機0--> GameOver
 GameOver --900フレーム--> Title
 Esc --入力--> Title
 ```
 
-`StageIntro` と `StageClear` では敵の生成とステージスケジュールのフレーム進行を停止する。`StageClear`中はスプライトを描画せず、クリア表示とHUDのみを表示する。`Ending`でスコア更新がない場合もステージ1の`StageIntro`へ戻る。
+`StageIntro` と `StageClear` では敵の生成とステージスケジュールのフレーム進行を停止する。`Respawn`中は自キャラと自弾を消去し、敵・敵弾・背景・スケジュールを約10秒（600フレーム）進行させる。`StageClear`中はスプライトを描画せず、クリア表示とHUDのみを表示する。`Ending`でスコア更新がない場合もステージ1の`StageIntro`へ戻る。
 
 ## 5. 定義データ
 
@@ -305,8 +309,6 @@ struct StageData {
 struct CharacterTrait {
     character_id: u16,
     character_type: CharacterType,
-    shape_id: u16,
-    animation_id: u16,
     hitbox_width: i16,
     hitbox_height: i16,
     max_hp: u16,
@@ -332,7 +334,7 @@ StageData
 FirePatternData
   -> bullet_character_id -> BulletCharacterData
 BulletCharacterData
-  -> shape_id / target_frame_id
+  -> damage / homing / player_damage
 ```
 
 ID `0` は無効値とする。参照先が存在しない場合は、その行の生成を中止してエラーを記録する。
@@ -448,7 +450,7 @@ MVP では `duration_frames` に応じて `t` を進める。一定速度が必�
 - 敵弾対自キャラ: 敵弾を削除し、特性の `player_damage` を適用
 - 敵対自キャラ: 特性の `contact_damage` を適用
 - 無敵中の自キャラは敵と敵弾から命中しない
-- HP が 0 になったら成長を初期化し、残機を減らしてステージ先頭から再開
+- HP が 0 になったら自キャラと自弾を消去し、残機を減らす。残機があれば敵と敵弾を動かしたまま600フレーム待機し、その後ステージ先頭へ戻る。残機0なら`GameOver`へ遷移する
 - 残機が 0 の場合はゲームオーバーへ遷移
 
 ## 12. 入力・HUD・ランキング

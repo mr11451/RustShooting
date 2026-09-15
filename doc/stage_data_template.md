@@ -16,20 +16,20 @@ MVP では、この Markdown の内容を確認したうえで Rust の定数配
 - `StageIntro` と `StageClear` の間はスケジュールのフレームカウントを進めない
 - 各ステージで使用する画像は、そのステージの `StageIntro` 中に読み込む
 - キャラクタ画像の形式はスプライトシート GIF とする
-- GIF の各フレームは同一サイズで、`shape_id` と `animation_id` から参照する
+- キャラクター画像は`character_id`とステージ別画像データから参照する
 - GIF の再生タイミングはゲーム側のフレーム管理で制御する
-- 実装では `SpriteSheet::from_gif_path` または `SpriteSheet::from_gif_bytes` で読み込み、GIFフレームを `animation_id`、シート内タイルを `tile_id` で参照する
-- `StageIntro` 中は必要画像の読み込みが完了するまで `Playing` へ遷移しない
+- `SpriteSheet::from_gif_path`または`SpriteSheet::from_gif_bytes`で読み込み、GIFフレームを`animation_id`、シート内タイルを`tile_id`として参照する
+- GIF の各フレームは同一サイズで、ステージ画像データと`character_id`から参照する
+- `StageIntro`中は必要画像の読み込みが完了するまで`Playing`へ遷移しない
 - 効果音はゲーム開始時に全件読み込む
-- BGM は各ステージの `StageIntro` 中に画像と同時に読み込む
-- `StageIntro` 中は画像と BGM の読み込みが完了するまで `Playing` へ遷移しない
+- BGMは各ステージの`StageIntro`中に画像と同時に読み込む
 - リボーン時は同じステージの画像キャッシュを再利用し、ステージ切り替え時に入れ替える
 - 座標の原点は画面左上
 - `x` は右方向、`y` は下方向を正とする
 - 画面内の論理座標は `x: 0..=479`、`y: 0..=639` を基本とする
 - 画面外から出現させる場合は、画面外座標を許可する
 - ID `0` は未設定または無効値とし、実データは `1` 以上の通し番号を使う
-- 同じフレームに複数のスケジュール行がある場合は、ID の小さい順に処理する
+- 同じフレームに複数のスケジュール行がある場合は、ステージ別配列の記述順に処理する
 - 自弾と敵弾は、画像矩形の全体が画面外へ出た時点で削除する。中心座標や一部が画面外になっただけでは削除しない
 - 自弾と敵弾の画像矩形を中心座標 `(x, y)`、半幅 `half_width`、半高 `half_height` で表す場合、`x + half_width < 0`、`x - half_width >= 480`、`y + half_height < 0`、`y - half_height >= 640` のいずれかを満たした時点で削除する
 - 画面外へ出た成長アイテムも削除する
@@ -133,8 +133,6 @@ ScreenLayout {
 
 | 項目 | 型の候補 | 内容 |
 |---|---|---|
-| `schedule_id` | `u16` | スケジュール ID。1 以上の通し番号 |
-| `stage_id` | `u8` | 所属ステージ。1..=6 |
 | `frame` | `u32` | ステージ本編開始からのフレーム。0..=5399 |
 | `spawn_x` | `i16` | 出現位置の X 座標。`Q12.4` 固定小数点 |
 | `spawn_y` | `i16` | 出現位置の Y 座標。`Q12.4` 固定小数点 |
@@ -144,14 +142,11 @@ ScreenLayout {
 | `difficulty` | `u8` | 難易度レベル。1..=4 |
 | `fire_pattern_id` | `u16` | 敵弾発射設定 ID。発射位置、タイミング、弾種を別データから参照。不要なら 0 |
 | `background_speed` | `i16` | `Q12.4` 固定小数点。この行から適用する背景速度。不要なら現在値を維持 |
-| `enabled` | `bool` | 使用する行かどうか |
 
 ### スケジュール記入欄
 
 ```text
 Schedule {
-    schedule_id: <ID>,
-    stage_id: <ステージ ID>,
     frame: <フレーム>,
     spawn_x: <X>,
     spawn_y: <Y>,
@@ -161,18 +156,16 @@ Schedule {
     difficulty: <1..4>,
     fire_pattern_id: <敵弾発射設定 ID>,
     background_speed: <Q12.4 速度または変更なし>,
-    enabled: true,
 }
 ```
 
 ### スケジュール記入例
 
-| schedule_id | stage_id | frame | spawn_x | spawn_y | object_type | character_id | orbit_id | difficulty | fire_pattern_id | background_speed |
-|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|
-| 1 | 1 | 0 | 1280 | -384 | Enemy | 1 | 1 | 1 | 1 | 16 |
-| 2 | 1 | 90 | 5120 | -384 | Enemy | 2 | 2 | 1 | 2 | 16 |
-| 3 | 1 | 900 | 2560 | 1920 | GrowthItem | 1 | 0 | 1 | 0 | 32 |
-| 4 | 1 | 5399 | 5120 | -512 | Boss | 100 | 3 | 4 | 10 | 0 |
+| frame | spawn_x | spawn_y | object_type | character_id | orbit_id | difficulty | fire_pattern_id | background_speed |
+|---:|---:|---:|---|---:|---:|---:|---:|---:|
+| 0 | 1280 | -384 | Enemy | 2 | 1 | 1 | 1 | 16 |
+| 90 | 5120 | -384 | Enemy | 2 | 2 | 1 | 1 | 16 |
+| 5399 | 5120 | -512 | Boss | 100 | 8 | 4 | 10 | 0 |
 
 ## 4. キャラクタ特性データ
 
@@ -184,8 +177,6 @@ Schedule {
 |---|---|---|
 | `character_id` | `u16` | キャラクタ特性 ID。1 以上の通し番号 |
 | `character_type` | `enum` | `Player`、`Enemy`、`Boss`、`GrowthItem` |
-| `shape_id` | `u16` | スプライトまたは画像形状 ID |
-| `animation_id` | `u16` | アニメーション定義 ID。不要なら 0 |
 | `hitbox_width` | `i16` | 中心からの矩形幅。符号付き `Q12.4` |
 | `hitbox_height` | `i16` | 中心からの矩形高さ。符号付き `Q12.4` |
 | `max_hp` | `u16` | 初期 HP または敵の最大 HP。アイテムでは 0 |
@@ -205,8 +196,6 @@ Schedule {
 CharacterTrait {
     character_id: <ID>,
     character_type: <Player|Enemy|Boss|GrowthItem>,
-    shape_id: <画像形状 ID>,
-    animation_id: <アニメーション ID または0>,
     hitbox_width: <Q12.4幅>,
     hitbox_height: <Q12.4高さ>,
     max_hp: <HPまたは0>,
@@ -224,8 +213,8 @@ CharacterTrait {
 
 ### 特性データ例
 
-| character_id | character_type | shape_id | hitbox_width | hitbox_height | max_hp | contact_damage | player_damage | score | default_orbit_id | default_fire_pattern_id | growth_effect_id |
-|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| character_id | character_type | hitbox_width | hitbox_height | max_hp | contact_damage | player_damage | score | default_orbit_id | default_fire_pattern_id | growth_effect_id |
+|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 1 | Enemy | 1 | 256 | 256 | 10 | 10 | 10 | 100 | 1 | 1 | 0 |
 | 100 | Boss | 100 | 1024 | 768 | 1000 | 50 | 50 | 10000 | 3 | 10 | 0 |
 | 200 | GrowthItem | 200 | 192 | 192 | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
@@ -248,7 +237,6 @@ CharacterTrait {
 | `end_angle` | `Option<u16>` | 円軌道の終了角度。角度で終了しない場合は未設定 |
 | `duration_frames` | `u32` | 軌道を適用するフレーム数。0 は無期限の候補 |
 | `acceleration` | `i16` | 加速度。`Q12.4` 固定小数点。不要なら 0 |
-| `target_direction` | `enum` | `Fixed`、`PlayerAtSpawn`、`PlayerTracking` など |
 | `next_orbit_id` | `u16` | 終了後に切り替える軌道。不要なら 0 |
 | `rotation` | `i8` | 円軌道の回転方向。`1` は時計回り、`-1` は反時計回り |
 
@@ -268,7 +256,6 @@ Orbit {
     end_angle: <円軌道の終了角度または未設定>,
     duration_frames: <フレーム数>,
     acceleration: <Q12.4加速度>,
-    target_direction: <Fixed|PlayerAtSpawn|PlayerTracking>,
     next_orbit_id: <次の軌道 ID>,
     rotation: <1または-1>,
 }
@@ -276,11 +263,11 @@ Orbit {
 
 ### 軌道記入例
 
-| orbit_id | orbit_type | direction | speed | radius | control_point_1 | control_point_2 | control_point_end | start_angle | end_angle | duration_frames | acceleration | target_direction | next_orbit_id | rotation |
+| orbit_id | orbit_type | direction | speed | radius | control_point_1 | control_point_2 | control_point_end | start_angle | end_angle | duration_frames | acceleration | next_orbit_id | rotation |
 |---:|---|---:|---:|---:|---|---|---|---:|---:|---:|---:|---|---:|---:|
-| 1 | Straight | Down | 32 | 0 | - | - | - | - | - | 540 | 0 | Fixed | 0 | 0 |
-| 2 | Circle | Right | 32 | 768 | - | - | - | 0 | - | 180 | 0 | Fixed | 1 | 1 |
-| 3 | Bezier | Down | 16 | 0 | 0,0 | 1600,0 | 5120,2560 | - | - | 900 | 0 | Fixed | 0 | 0 |
+| 1 | Straight | Down | 32 | 0 | - | - | - | - | - | 540 | 0 | 0 | 0 |
+| 2 | Circle | Right | 32 | 768 | - | - | - | 0 | - | 180 | 0 | 1 | 1 |
+| 3 | Bezier | Down | 16 | 0 | 0,0 | 1600,0 | 5120,2560 | - | - | 900 | 0 | 0 | 0 |
 
 ## 6. MVP 用の最小データ例
 
@@ -327,12 +314,13 @@ item_count: 4
 | `fire_frame` | `u32` | 敵の生成または軌道開始からの経過フレーム |
 | `spawn_offset_x` | `i16` | 敵の中心からの X 相対位置。符号付き `Q12.4` |
 | `spawn_offset_y` | `i16` | 敵の中心からの Y 相対位置。符号付き `Q12.4` |
-| `direction_type` | `enum` | `Fixed16`、`ToPlayerAtFire`、`ToPlayerTracking` など |
 | `direction` | `Direction16` | 固定方向。追尾発射では未使用 |
 | `bullet_character_id` | `u16` | 敵弾の特性 ID |
-| `bullet_count` | `u8` | 同時発射数 |
-| `interval_frames` | `u16` | 繰り返し発射の間隔。繰り返さない場合は 0 |
-| `enabled` | `bool` | 使用する行かどうか |
+| `angle_mode` | `enum` | `Fixed` または `AimAtPlayer` |
+| `volley_count` | `u8` | 放射弾の発射数。通常は1、ボス放射は32 |
+| `direction_step` | `i8` | 32方向の回転ステップ。`1`は時計回り、`-1`は反時計回り |
+| `repeat_interval_frames` | `u32` | 周期発射間隔。0は周期なし |
+| `volley_interval_frames` | `u32` | 放射弾1発ごとの間隔。6で約0.1秒 |
 
 ### 発射データ記入欄
 
@@ -342,12 +330,13 @@ FirePattern {
     fire_frame: <敵生成または軌道開始からのフレーム>,
     spawn_offset_x: <Q12.4相対X>,
     spawn_offset_y: <Q12.4相対Y>,
-    direction_type: <Fixed16|ToPlayerAtFire|ToPlayerTracking>,
     direction: <32方向または未設定>,
     bullet_character_id: <敵弾特性 ID>,
-    bullet_count: <発射数>,
-    interval_frames: <間隔または0>,
-    enabled: true,
+    angle_mode: <Fixed|AimAtPlayer>,
+    volley_count: <発射数>,
+    direction_step: <1または-1または0>,
+    repeat_interval_frames: <周期または0>,
+    volley_interval_frames: <放射間隔または0>,
 }
 ```
 
@@ -367,42 +356,28 @@ bullet_y = enemy_y + offset_y
 | 項目 | 型の候補 | 内容 |
 |---|---|---|
 | `bullet_character_id` | `u16` | 弾特性 ID。1 以上の通し番号 |
-| `owner_type` | `enum` | `Player` または `Enemy` |
-| `shape_id` | `u16` | 弾の画像・形状 ID |
-| `motion_type` | `enum` | `Straight`、`FixedDirection`、`Homing`、`Tracking` など |
-| `direction` | `Direction16` | 固定方向。固定方向以外では未使用 |
-| `speed` | `i16` | 弾速。符号付き `Q12.4` |
-| `acceleration` | `i16` | 加速度。符号付き `Q12.4` |
+| `fire_sound_id` | `u16` | 発射音ID |
+| `hit_sound_id` | `u16` | 命中音ID |
+| `hitbox_width` | `i16` | 当たり判定幅。符号付き `Q12.4` |
+| `hitbox_height` | `i16` | 当たり判定高。符号付き `Q12.4` |
 | `damage` | `u16` | 命中時のダメージ |
 | `penetrating` | `bool` | 敵に命中しても消滅しないか |
-| `homing_target` | `enum` | `None`、`Enemy`、`Player` |
-| `target_lock` | `enum` | `AtFire`、`Continuous` |
-| `hitbox_width` | `i16` | 当たり判定矩形の幅。`Q12.4` |
-| `hitbox_height` | `i16` | 当たり判定矩形の高さ。`Q12.4` |
-| `target_frame_id` | `u16` | ホーミング対象表示枠の画像 ID。不要なら 0 |
-| `fire_sound_id` | `u16` | 発射時に再生する効果音 ID。不要なら 0 |
-| `hit_sound_id` | `u16` | 命中時に再生する効果音 ID。不要なら 0 |
+| `homing` | `bool` | 発射後に自機を追尾するか |
+| `player_damage` | `u16` | 自機へ与えるダメージ |
 
 ### 弾特性記入欄
 
 ```text
 BulletCharacter {
     bullet_character_id: <ID>,
-    owner_type: <Player|Enemy>,
-    shape_id: <形状 ID>,
-    motion_type: <Straight|FixedDirection|Homing|Tracking>,
-    direction: <32方向または未設定>,
-    speed: <Q12.4弾速>,
-    acceleration: <Q12.4加速度>,
+    fire_sound_id: <発射効果音ID>,
+    hit_sound_id: <命中効果音ID>,
+    hitbox_width: <Q12.4幅>,
+    hitbox_height: <Q12.4高>,
     damage: <ダメージ>,
     penetrating: <true|false>,
-    homing_target: <None|Enemy|Player>,
-    target_lock: <AtFire|Continuous>,
-    hitbox_width: <Q12.4幅>,
-    hitbox_height: <Q12.4高さ>,
-    target_frame_id: <対象枠画像 ID または0>,
-    fire_sound_id: <発射効果音 ID または0>,
-    hit_sound_id: <命中効果音 ID または0>,
+    homing: <true|false>,
+    player_damage: <自機ダメージ>,
 }
 ```
 
@@ -422,8 +397,6 @@ struct StageData {
 struct CharacterTrait {
     character_id: u16,
     character_type: CharacterType,
-    shape_id: u16,
-    animation_id: u16,
     hitbox_width: i16,
     hitbox_height: i16,
     max_hp: u16,
@@ -460,8 +433,6 @@ struct RankingEntry {
 }
 
 struct ScheduleData {
-    schedule_id: u16,
-    stage_id: u8,
     frame: u32,
     spawn_x: i16,
     spawn_y: i16,
@@ -486,7 +457,6 @@ struct OrbitData {
     end_angle: Option<u16>,
     duration_frames: u32,
     acceleration: i16,
-    target_direction: TargetDirection,
     next_orbit_id: u16,
     rotation: i8,
 }
@@ -496,28 +466,25 @@ struct FirePatternData {
     fire_frame: u32,
     spawn_offset_x: i16,
     spawn_offset_y: i16,
-    direction_type: DirectionType,
     direction: Direction16,
     bullet_character_id: u16,
-    bullet_count: u8,
-    interval_frames: u16,
+    angle_mode: FireAngleMode,
+    volley_count: u8,
+    direction_step: i8,
+    repeat_interval_frames: u32,
+    volley_interval_frames: u32,
 }
 
 struct BulletCharacterData {
     bullet_character_id: u16,
-    owner_type: OwnerType,
-    shape_id: u16,
-    motion_type: MotionType,
-    direction: Direction16,
-    speed: i16,
-    acceleration: i16,
-    damage: u16,
-    penetrating: bool,
-    homing_target: HomingTarget,
-    target_lock: TargetLock,
+    fire_sound_id: u16,
+    hit_sound_id: u16,
     hitbox_width: i16,
     hitbox_height: i16,
-    target_frame_id: u16,
+    damage: u16,
+    penetrating: bool,
+    homing: bool,
+    player_damage: u16,
 }
 ```
 
@@ -568,9 +535,9 @@ BackgroundData {
 - ベジェ曲線は三次ベジェ曲線として、出現位置を `P0`、3 つの相対制御点を `P1/P2/P3` として解釈する
 - ベジェ曲線の速度を一定にするための弧長近似またはパラメータ `t` の進め方
 - 敵弾発射データの `fire_frame` を敵生成時点と軌道開始時点のどちらから数えるか
-- `direction_type` ごとの方向計算と、発射位置オフセットの適用タイミング
+- `angle_mode`（固定角度／発射時自機狙い）と、発射位置オフセットの適用タイミング
 - 自弾・敵弾の特性 ID と形状 ID の対応
-- ホーミング対象の選択条件、発射時固定か継続追尾か、対象消滅時の挙動
+- `homing`がtrueの敵弾だけが発射後も自機を継続追尾する。`AimAtPlayer`は発射時に角度を固定する
 - ホーミング対象を示す四角枠の表示サイズ、表示時間、描画レイヤー
 - 貫通弾の命中回数、威力減衰、消滅条件
 - ボスはステージ最終フレーム `play_frames - 1` に出現し、撃破をクリア条件とする

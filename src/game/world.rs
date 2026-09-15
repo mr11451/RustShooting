@@ -386,7 +386,11 @@ impl World {
 
     pub fn update_enemy_projectiles(&mut self) {
         self.enemy_bullets.for_each_active_mut(|bullet| {
-            if bullet_character(bullet.character_id).is_some_and(|data| data.homing) {
+            bullet.homing_frame = bullet.homing_frame.saturating_add(1);
+            if self.state == GameState::Playing
+                && bullet_character(bullet.character_id).is_some_and(|data| data.homing)
+                && bullet.homing_frame.is_multiple_of(30)
+            {
                 let delta_x = f32::from(self.player_x.raw() - bullet.x.raw());
                 let delta_y = f32::from(self.player_y.raw() - bullet.y.raw());
                 let distance = (delta_x * delta_x + delta_y * delta_y).sqrt();
@@ -681,6 +685,17 @@ impl World {
                 && Self::character_hitbox(snapshot.character_id, snapshot.x, snapshot.y)
                     .is_some_and(|enemy_box| overlaps(player_box, enemy_box))
             {
+                let player_contact_damage = character_trait(1)
+                    .map(|data| data.contact_damage)
+                    .unwrap_or(0);
+                if player_contact_damage > 0
+                    && let Some(enemy) = self.enemies.get_mut(snapshot.index)
+                {
+                    enemy.hp = enemy.hp.saturating_sub(player_contact_damage);
+                    if enemy.hp == 0 {
+                        enemy.active = false;
+                    }
+                }
                 damage = character_trait(snapshot.character_id).map(|data| data.contact_damage);
                 break;
             }

@@ -84,7 +84,7 @@
 ```rust
 pub struct StageData {
     pub stage_id: u8,           // ステージ番号 (1..=6)
-    pub play_frames: u32,       // 本編ステージ長フレーム数 (10,800 = 3分 at 60fps)
+    pub play_frames: u32,       // 本編ステージ長フレーム数 (5,400 = 90秒 at 60fps)
     pub intro_frames: u16,      // 開始演出フレーム数 (90 = 3秒)
     pub clear_frames: u16,      // クリア演出フレーム数 (90 = 3秒)
     pub boss_character_id: u16, // ステージボスのキャラクターID
@@ -98,8 +98,6 @@ pub struct StageData {
 
 ```rust
 pub struct ScheduleData {
-    pub schedule_id: u16,       // スケジュール一意ID (1..)
-    pub stage_id: u8,           // 所属ステージ (1..=6)
     pub frame: u32,             // 出現タイミング (0..play_frames-1)
     pub spawn_x: Q12_4,         // 出現X座標 (Q12.4)
     pub spawn_y: Q12_4,         // 出現Y座標 (Q12.4)
@@ -112,22 +110,9 @@ pub struct ScheduleData {
 }
 ```
 
-### 2.3 ステージ戦闘特性（`StageCombatData`）
+### 2.3 ステージ戦闘データ
 
-ステージごとの通常敵、ボス、発射パターン、敵弾種をまとめて定義します。
-
-```rust
-pub struct StageCombatData {
-  pub stage_id: u8,
-  pub enemy_character_id: u16,
-  pub boss_character_id: u16,
-  pub enemy_fire_pattern_id: u16,
-  pub boss_fire_pattern_id: u16,
-  pub enemy_bullet_character_id: u16,
-}
-```
-
-`STAGE_COMBAT_DATA`を変更すると、スケジュールの出現タイミングを変えずにステージの敵構成や敵弾種を変更できます。
+通常敵の種類・発射パターン・敵弾はスケジュールの`character_id`、`fire_pattern_id`、および`CharacterTrait.bullet_character_id`で決まります。ステージごとのスケジュールは`src/data/stage01.rs`〜`stage06.rs`に分割されています。
 
 ### 2.4 キャラクター特性テーブル（`CharacterTrait`）
 自機、各種敵、ボス、アイテムの基本ステータスを定義します。
@@ -136,13 +121,11 @@ pub struct StageCombatData {
 pub struct CharacterTrait {
     pub character_id: u16,           // キャラクターID (1: 自機, 2..: 敵, 100..: ボス, 200: アイテム)
     pub character_type: CharacterType,// Player, Enemy, Boss, GrowthItem
-    pub shape_id: u16,               // スプライト形状ID
-    pub animation_id: u16,           // アニメーションID
     pub hitbox_width: i16,           // 当たり判定全幅 (Q12.4)
     pub hitbox_height: i16,          // 当たり判定全高 (Q12.4)
     pub max_hp: u16,                 // 最大HP (敵・ボスの耐久力、自機=100)
-    pub contact_damage: u16,         // 自機との接触時に自機が受けるダメージ
-    pub player_damage: u16,          // 敵弾等が自機に与えるダメージ
+    pub contact_damage: u16,         // 接触した相手へ与えるダメージ
+    pub player_damage: u16,          // 敵・敵弾が自機へ与えるダメージ
     pub score: u32,                  // 撃破時に加算される得点
     pub default_orbit_id: u16,       // デフォルト軌道ID
     pub default_fire_pattern_id: u16,// デフォルト発射パターンID
@@ -175,7 +158,7 @@ pub struct StageEnemyImageData {
 
 全ステージ共通の画像ディレクトリは`STAGE_ENEMY_IMAGE_DIRECTORY`（`assets/characters`）で管理し、テーブルにはファイル名だけを記載します。
 
-敵弾は`EnemyBulletProfileData`で発射元キャラクターIDごとに弾特性IDを割り当てます。通常敵ID `2..=6`とボスID `100..=105`は、それぞれ弾ID `6..=16`へ対応し、形状・当たり判定・ダメージ・画像フレームを個別に調整できます。
+敵弾は`CharacterTrait.bullet_character_id`で発射元ごとに弾特性IDを割り当てます。通常敵ID `2..=7`とボスID `100..=105`は、敵弾ID `6..=16`を使用できます。
 
 ### 2.5 弾特性データ（`BulletCharacterData`）
 自機弾および敵弾の衝突特性・威力を定義します。
@@ -189,6 +172,7 @@ pub struct BulletCharacterData {
     pub hitbox_height: i16,       // 当たり判定全高 (Q12.4)
     pub damage: u16,              // 敵に与えるダメージ (自弾時)
     pub penetrating: bool,        // 貫通弾フラグ (trueの場合命中後も消滅しない)
+    pub homing: bool,             // 発射後に自機を追尾するか
     pub player_damage: u16,       // 自機に与えるダメージ (敵弾時)
 }
 ```
@@ -213,7 +197,7 @@ pub struct PlayerGrowthData {
 }
 ```
 
-現行の仮データは、グループ数 `4/6/8/10/12`、グループ内弾数 `1/2/3/4/5`、弾種ID `1`です。方向配列はレベルごとに定義し、北方向と左右の斜め方向を組み合わせて、発射時にQ12.4速度ベクトルへ変換します。
+現行の仮データは、グループ数 `4/6/8/10/12`、グループ内弾数 `1/2/3/4/5`、自弾ID `1/2/3/4/5`です。自弾画像は`assets/bullets/player_bullet_01.gif`〜`05.gif`に分かれ、各画像は16x16タイルを左右に持ちます。
 
 ### 2.7 発射パターンデータ（`FirePatternData`）
 敵が弾を発射するタイミング・オフセット・弾種・方向を定義します。
@@ -229,8 +213,17 @@ pub struct FirePatternData {
     pub speed: Q12_4,            // 弾速 (Q12.4)
     pub bullet_velocity_x: Q12_4,// X方向初速
     pub bullet_velocity_y: Q12_4,// Y方向初速
+    pub angle_mode: FireAngleMode,// Fixed または AimAtPlayer
+    pub volley_count: u8,         // 放射弾の発射数
+    pub direction_step: i8,       // 32方向上の回転ステップ。+1/-1
+    pub repeat_interval_frames: u32,// 周期発射間隔。0は周期なし
+    pub volley_interval_frames: u32,// 放射弾1発ごとの間隔
 }
 ```
+
+  `angle_mode`が`Fixed`の場合は設定方向・速度を使用し、`AimAtPlayer`の場合は発射時の敵位置から自機位置への速度ベクトルを一度だけ計算します。発射後に速度を変更するのは`BulletCharacterData.homing`がtrueの場合だけです。
+
+  ボスの放射パターンは`volley_count=32`、`volley_interval_frames=6`（約0.1秒）で32方向を1発ずつ発射します。`direction_step=1`は時計回り、`-1`は反時計回りです。周期発射は現在240フレーム間隔です。
 
 ### 2.8 軌道データ（`OrbitData`）
 敵およびボスの移動軌道を定義します。
@@ -265,10 +258,10 @@ pub struct OrbitData {
 
 ### 3.1 スプライトシート GIF（`assets/characters/*.gif`, `assets/bullets/*.gif`）
 - **画像形式**: 標準 GIF アニメーション形式（透過色対応）。
-- **タイルグリッド**: 同一サイズの正方形タイル（敵弾: `8x8`, 自機・通常敵: `32x32`, ボス: `64x64`）を横またはグリッド状に配置。
+- **タイルグリッド**: 同一サイズの正方形タイル（敵弾: `8x8`, 自弾: `16x16`、自機・通常敵: `32x32`, ボス: `64x64`）を横またはグリッド状に配置。
 - **デコード仕様**:
   - `image::codecs::gif::GifDecoder` により全フレームを RGBA8 ピクセルバッファへ展開。
-  - GIFフレーム番号を `animation_id`、画像内の各タイル位置を `tile_id` としてインデックス管理。
+  - GIFフレーム番号を`animation_id`、画像内の各タイル位置を`tile_id`としてインデックス管理する。これは`SpriteSheet`内部の画像フレーム識別であり、`CharacterTrait`の項目ではない。
   - GPU 転送時に `Rgba8UnormSrgb` 2D テクスチャとしてバインド。
 
 ### 3.2 背景タイルアトラス PNG（`assets/backgrounds/*_atlas.png`）

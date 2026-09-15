@@ -249,13 +249,11 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
     CharacterTrait {
         character_id: 1,
         character_type: CharacterType::Player,
-        shape_id: 1,
-        animation_id: 0,
         hitbox_width: 256,
         hitbox_height: 256,
         max_hp: 100,
-        contact_damage: 0,
-        player_damage: 0,
+        contact_damage: 100,
+        player_damage: 100,
         score: 0,
         default_orbit_id: 0,
         default_fire_pattern_id: 0,
@@ -267,8 +265,6 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
     CharacterTrait {
         character_id: 2,
         character_type: CharacterType::Enemy,
-        shape_id: 1,
-        animation_id: 0,
         hitbox_width: 256,
         hitbox_height: 256,
         max_hp: 10,
@@ -285,8 +281,6 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
     CharacterTrait {
         character_id: 3,
         character_type: CharacterType::Enemy,
-        shape_id: 1,
-        animation_id: 0,
         hitbox_width: 256,
         hitbox_height: 256,
         max_hp: 15,
@@ -303,8 +297,6 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
     CharacterTrait {
         character_id: 4,
         character_type: CharacterType::Enemy,
-        shape_id: 1,
-        animation_id: 0,
         hitbox_width: 384,
         hitbox_height: 384,
         max_hp: 30,
@@ -321,8 +313,6 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
     CharacterTrait {
         character_id: 5,
         character_type: CharacterType::Enemy,
-        shape_id: 1,
-        animation_id: 0,
         hitbox_width: 320,
         hitbox_height: 320,
         max_hp: 25,
@@ -339,8 +329,6 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
     CharacterTrait {
         character_id: 6,
         character_type: CharacterType::Enemy,
-        shape_id: 1,
-        animation_id: 0,
         hitbox_width: 640,
         hitbox_height: 512,
         max_hp: 200,
@@ -357,8 +345,6 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
     CharacterTrait {
         character_id: 100,
         character_type: CharacterType::Boss,
-        shape_id: 1,
-        animation_id: 0,
         hitbox_width: 1024,
         hitbox_height: 640,
         max_hp: 1_000,
@@ -375,8 +361,6 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
     CharacterTrait {
         character_id: 101,
         character_type: CharacterType::Boss,
-        shape_id: 1,
-        animation_id: 0,
         hitbox_width: 1152,
         hitbox_height: 720,
         max_hp: 1_200,
@@ -393,8 +377,6 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
     CharacterTrait {
         character_id: 102,
         character_type: CharacterType::Boss,
-        shape_id: 1,
-        animation_id: 0,
         hitbox_width: 1280,
         hitbox_height: 768,
         max_hp: 1_500,
@@ -411,8 +393,6 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
     CharacterTrait {
         character_id: 103,
         character_type: CharacterType::Boss,
-        shape_id: 1,
-        animation_id: 0,
         hitbox_width: 1280,
         hitbox_height: 800,
         max_hp: 1_800,
@@ -429,8 +409,6 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
     CharacterTrait {
         character_id: 104,
         character_type: CharacterType::Boss,
-        shape_id: 1,
-        animation_id: 0,
         hitbox_width: 1408,
         hitbox_height: 880,
         max_hp: 2_200,
@@ -447,8 +425,6 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
     CharacterTrait {
         character_id: 105,
         character_type: CharacterType::Boss,
-        shape_id: 1,
-        animation_id: 0,
         hitbox_width: 1536,
         hitbox_height: 960,
         max_hp: 3_000,
@@ -465,8 +441,6 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
     CharacterTrait {
         character_id: 7,
         character_type: CharacterType::Enemy,
-        shape_id: 1,
-        animation_id: 0,
         hitbox_width: 512,
         hitbox_height: 512,
         max_hp: 80,
@@ -483,8 +457,6 @@ pub const CHARACTER_TRAITS: &[CharacterTrait] = &[
     CharacterTrait {
         character_id: 200,
         character_type: CharacterType::GrowthItem,
-        shape_id: 0,
-        animation_id: 0,
         hitbox_width: 192,
         hitbox_height: 192,
         max_hp: 0,
